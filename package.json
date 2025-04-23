@@ -1,0 +1,35 @@
+{
+  "name": "selection-hook",
+  "version": "0.9.5",
+  "description": "A native Node.js module with Node-API that allows monitoring text selections across applications using multiple methods.",
+  "author": "0xfullex",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "install": "node scripts/check-binary.js || npm run build",
+    "build": "node-gyp rebuild && node scripts/cleanup.js",
+    "test": "node --trace-deprecation --force-node-api-uncaught-exceptions-policy=true test/test.js "
+  },
+  "keywords": [
+    "text",
+    "selection",
+    "hook",
+    "native",
+    "addon"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "node-gyp-build": "^4.7.1"
+  },
+  "devDependencies": {
+    "node-addon-api": "^5.1.0",
+    "node-gyp": "^9.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "gypfile": true,
+  "os": [
+    "win32"
+  ]
+}
