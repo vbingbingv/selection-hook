@@ -1033,13 +1033,25 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
     if (!result)
         return false;
 
+    // decide by cursor shapes
+    HCURSOR arrowCursor = LoadCursor(NULL, IDC_ARROW);
     HCURSOR beamCursor = LoadCursor(NULL, IDC_IBEAM);
-
-    /**
-     * uia_control_type: chrome devtools use UIA_GroupControlTypeId
-     */
-    if (currentInstance->mouse_up_cursor != beamCursor && uia_control_type != UIA_GroupControlTypeId)
-        return false;
+    // beam is surely ok
+    if (currentInstance->mouse_up_cursor != beamCursor)
+    {
+        if (currentInstance->mouse_up_cursor != arrowCursor)
+        {
+            return false;
+        }
+        /**
+         * uia_control_type: chrome devtools use UIA_GroupControlTypeId
+         * while the cursor is arrow
+         */
+        else if (uia_control_type != UIA_GroupControlTypeId)
+        {
+            return false;
+        }
+    }
 
     return true;
 }
