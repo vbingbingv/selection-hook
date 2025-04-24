@@ -1,31 +1,40 @@
-# Text Selection Hook for Node.js
+# Text Selection Hook for Node.js and Electron
 
 A native Node.js module with Node-API that allows monitoring text selections across applications using multiple methods.
 
 ## Features
 
-- Monitor text selections across all applications on Windows
-- Detect selections made with mouse drag, double-clicking
-- Get selected text content and coordinates
-- Track mouse and keyboard events
-- Supports multiple methods to get selected text:
-  - UI Automation (modern applications)
-  - Accessibility interfaces (legacy applications)
-  - Focused control
-  - Clipboard fallback (using simulated Ctrl+C, and finetuned)
-- For Node.js v10+ and Electron v3+
-- Typescript supported
-  
+Maybe the first-ever open-source, fully functional text selection tool.
+
+- **Cross-application text selection monitoring**
+  - Capture selected text content and its screen coordinates
+  - Auto-triggers on user selection, or manual API triggers
+  - Rich API to control the selection behaviors
+- **Input event listeners**
+  - Mouse events: `down/up/wheel/move`
+  - Keyboard events: `keydown/keyup`
+  - *No additional hooks required* – works natively.
+- **Multi-method text extraction** (automatic fallback):
+  - *UI Automation* (modern apps)
+  - *Accessibility APIs* (legacy apps)
+  - *Focused control* (active input fields)
+  - *Clipboard fallback* (simulated `Ctrl+C` with optimizations)
+- **Compatibility**
+  - Node.js `v10+` | Electron `v3+`
+  - TypeScript support included.
+
+
 ## Platform
 
-Now only support Windows. MacOS/Linux platforms are on the way
+Currently only supports Windows. macOS/Linux support is coming soon.
 
 ## Installation
 
 ```bash
 npm install selection-hook
 ```
-The npm package includes pre-built .node file, so no rebuilding is needed during usage. If you encounter rebuilding issues when using Electron, you can add following values to your electron-build configuration.
+
+The npm package ships with a pre-built `.node` file — no rebuilding needed. For Electron rebuild issues, add these values to your `electron-builder` config to avoid rebuilding:
 
 ```
 rebuildConfig: {
@@ -41,7 +50,6 @@ npm run demo
 
 ## Usage
 
-### Basic
 
 ```javascript
 const SelectionHook = require('selection-hook');
@@ -53,6 +61,8 @@ const selectionHook = new SelectionHook();
 // Listen for text selection events
 selectionHook.on('text-selection', (data) => {
   console.log('Selected text:', data.text);
+  // For mouse start/end position and text range coornidates
+  // see API Reference below.
 });
 
 // Start monitoring (with default configuration)
@@ -70,180 +80,231 @@ selectionHook.stop();
 selectionHook.cleanup();
 ```
 
+See [`examples/node-demo.js`](https://github.com/0xfullex/selection-hook/blob/main/examples/node-demo.js) for detailed usage.
+
 ## API Reference
 
-### SelectionHook Class
 
-#### Constructor
+
+### Constructor
 ```javascript
 const hook = new SelectionHook();
 ```
 
-#### Methods
+### Methods
 
-- **start(config?: SelectionConfig): boolean**  
+#### **`start(config?: SelectionConfig): boolean`**  
   Start monitoring text selections.
   
-  Config options:
+  Config options (with default values):
   ```javascript
   {
-    debug: boolean,                     // Enable debug logging
-    enableMouseMoveEvent: boolean,      // Enable mouse movement tracking
-    enableClipboard: boolean,           // Enable clipboard fallback
-    selectionPassiveMode: boolean,      // Enable passive mode
-    clipboardMode: SelectionHook.ClipboardMode, // Clipboard mode
-    programList: string[]               // Program list for clipboard mode
+    debug?: false,                 // Enable debug logging
+    enableMouseMoveEvent?: false,  // Enable mouse move tracking, can be set in runtime
+    enableClipboard?: true,        // Enable clipboard fallback, can be set in runtime
+    selectionPassiveMode?: false,  // Enable passive mode, can be set in runtime
+    clipboardMode?: SelectionHook.ClipboardMode.DEFAULT, // Clipboard mode, can be set in runtime
+    programList?: string[]         // Program list for clipboard mode, can be set in runtime
   }
   ```
+
+  see [`SelectionHook.ClipboardMode`](#selectionhookclipboardmode) for details
   
-- **stop(): boolean**  
+#### **`stop(): boolean`**
   Stop monitoring text selections.
-  
-- **getCurrentSelection(): TextSelectionData | null**  
+
+#### **`getCurrentSelection(): TextSelectionData | null`**  
   Get the current text selection if any exists.
   
-- **enableMouseMoveEvent(): boolean**  
-  Enable mouse movement events (high CPU usage).
+#### **`enableMouseMoveEvent(): boolean`**  
+  Enable mouse move events (high CPU usage). Disabled by default.
   
-- **disableMouseMoveEvent(): boolean**  
-  Disable mouse movement events.
+#### **`disableMouseMoveEvent(): boolean`**  
+  Disable mouse move events. Disabled by default.
   
-- **enableClipboard(): boolean**  
-  Enable clipboard fallback for text selection.
+#### **`enableClipboard(): boolean`**  
+  Enable clipboard fallback for text selection. Enabled by default.
   
-- **disableClipboard(): boolean**  
-  Disable clipboard fallback for text selection.
+#### **`disableClipboard(): boolean`**  
+  Disable clipboard fallback for text selection. Enabled by default.
   
-- **setClipboardMode(mode: ClipboardMode, programList?: string[]): boolean**  
-  Configure how clipboard fallback works with different programs.
+#### **`setClipboardMode(mode: ClipboardMode, programList?: string[]): boolean`**  
+  Configure how clipboard fallback works with different programs. See `SelectionHook.ClipboardMode` constants for details.
   
-- **setSelectionPassiveMode(passive: boolean): boolean**  
-  Set passive mode for selection (only triggered by getCurrentSelection).
+#### **`setSelectionPassiveMode(passive: boolean): boolean`**  
+  Set passive mode for selection (only triggered by getCurrentSelection, `text-selection` event will not be emitted). 
   
-- **isRunning(): boolean**  
-  Check if hook is currently running.
+#### **`isRunning(): boolean`**  
+  Check if selection-hook is currently running.
   
-- **cleanup()**  
+#### **`cleanup()`**  
   Release resources and stop monitoring.
 
-#### Constants
 
-- **SelectionHook.SelectionMethod**
-  - `NONE`: No selection method
-  - `UIA`: UI Automation
-  - `FOCUSCTL`: Focused control
-  - `ACCESSIBLE`: Accessibility interface
-  - `CLIPBOARD`: Clipboard fallback
 
-- **SelectionHook.PositionLevel**
-  - `NONE`: No position information
-  - `MOUSE_SINGLE`: Only current mouse position
-  - `MOUSE_DUAL`: Mouse start and end positions
-  - `SEL_FULL`: Full selection coordinates
-  - `SEL_DETAILED`: Detailed selection coordinates
+### Events
 
-- **SelectionHook.ClipboardMode**
-  - `DEFAULT`: Use clipboard for all programs
-  - `INCLUDE_LIST`: Only use clipboard for programs in list
-  - `EXCLUDE_LIST`: Use clipboard for all except programs in list
+#### **`text-selection`**
 
-#### Events
-
-- **text-selection**: Emitted when text is selected
+Emitted when text is selected, see [`TextSelectionData`](#textselectiondata) for `data` structure
   ```javascript
-  hook.on('text-selection', (data) => {
+  hook.on('text-selection', (data: TextSelectionData) => {
     // data contains selection information
   });
   ```
 
-- **mouse-move**, **mouse-up**, **mouse-down**: Mouse events
+#### **`mouse-move`**, **`mouse-up`**, **`mouse-down`**
+
+Mouse events, see [`MouseEventData`](#mouseeventdata) for `data` structure 
   ```javascript
-  hook.on('mouse-up', (data) => {
+  hook.on('mouse-XXX', (data: MouseEventData) => {
     // data contains mouse coordinates and button info
   });
   ```
 
-- **mouse-wheel**: Mouse wheel events
+#### **`mouse-wheel`**
+
+Mouse wheel events, see [`MouseWheelEventData`](#mousewheeleventdata) for `data` structure 
   ```javascript
-  hook.on('mouse-wheel', (data) => {
+  hook.on('mouse-wheel', (data: MouseWheelEventData) => {
     // data contains wheel direction info
   });
   ```
 
-- **key-down**, **key-up**: Keyboard events
+#### **`key-down`**, **`key-up`**
+
+Keyboard events, see [`KeyboardEventData`](#keyboardeventdata) for `data` structure
   ```javascript
-  hook.on('key-down', (data) => {
+  hook.on('key-XXX', (data: KeyboardEventData) => {
     // data contains key code and modifier info
   });
   ```
 
-- **status**: Hook status changes
+#### **`status`**
+
+Hook status changes
   ```javascript
-  hook.on('status', (status) => {
+  hook.on('status', (status: string) => {
     // status is a string, e.g. "started", "stopped"
   });
   ```
 
-- **error**: Error events
+#### **`error`**
+
+Error events
+  Only display errors when `debug` set to `true` when `start()`
   ```javascript
-  hook.on('error', (error) => {
+  hook.on('error', (error: Error) => {
     // error is an Error object
   });
   ```
 
-## TypeScript Support
+### Data Structure
+
+
+#### `TextSelectionData`
+Represents text selection information including content, source application, and coordinates.
+
+| Property        | Type                       | Description                                      |
+| --------------- | -------------------------- | ------------------------------------------------ |
+| `text`          | `string`                   | The selected text content                        |
+| `programName`   | `string`                   | Name of the application where selection occurred |
+| `startTop`      | `Point` | First paragraph's top-left coordinates (px)      |
+| `startBottom`   | `Point` | First paragraph's bottom-left coordinates (px)   |
+| `endTop`        | `Point` | Last paragraph's top-right coordinates (px)      |
+| `endBottom`     | `Point` | Last paragraph's bottom-right coordinates (px)   |
+| `mousePosStart` | `Point` | Mouse position when selection started (px)       |
+| `mousePosEnd`   | `Point` | Mouse position when selection ended (px)         |
+| `method`        | `SelectionMethod`          | Indicates which method was used to detect the text selection.   |
+| `posLevel`      | `PositionLevel`            | Indicates which positional data is provided.            |
+
+Type `Point` is `{ x: number; y: number }`
+
+When `PositionLevel` is:
+- `MOUSE_SINGLE`：only `mousePosStart` and `mousePosEnd` is provided, and `mousePosStart` equals `mousePosEnd`
+- `MOUSE_DUAL`: only `mousePosStart` and `mousePosEnd` is provided 
+- `SEL_FULL`: all the mouse position and paragraph's coordinates are provided
+
+
+#### `MouseEventData`
+Contains mouse click/movement information in screen coordinates.
+
+| Property | Type     | Description                      |
+| -------- | -------- | -------------------------------- |
+| `x`      | `number` | Horizontal pointer position (px) |
+| `y`      | `number` | Vertical pointer position (px)   |
+| `button` | `number` | Same as WebAPIs' MouseEvent.button <br /> `0`=Left, `1`=Middle, `2`=Right, `3`=Back, `4`=Forward  |
+
+
+
+#### `MouseWheelEventData`
+Describes mouse wheel scrolling events.
+
+| Property | Type     | Description                         |
+| -------- | -------- | ----------------------------------- |
+| `button` | `number` | `0`=Vertical, `1`=Horizontal scroll |
+| `flag`   | `number` | `1`=Up/Right, `-1`=Down/Left        |
+
+
+
+#### `KeyboardEventData`
+Represents keyboard key presses/releases.
+
+| Property   | Type      | Description                       |
+| ---------- | --------- | --------------------------------- |
+| `sys`      | `boolean` | System key pressed (Alt/Ctrl/Win) |
+| `vkCode`   | `number`  | Windows virtual key code          |
+| `scanCode` | `number`  | Hardware scan code                |
+| `flags`    | `number`  | Additional state flags            |
+| `type`     | `string?` | Internal event type               |
+| `action`   | `string?` | `"key-down"` or `"key-up"`        |
+
+
+### Constants
+
+#### **`SelectionHook.SelectionMethod`**
+
+Indicates which method was used to detect the text selection:
+- `NONE`: No selection detected
+- `UIA`: UI Automation
+- `FOCUSCTL`: Focused control
+- `ACCESSIBLE`: Accessibility interface
+- `CLIPBOARD`: Clipboard fallback
+
+#### **`SelectionHook.PositionLevel`**
+
+Indicates which positional data is provided:
+- `NONE`: No position information
+- `MOUSE_SINGLE`: Only single mouse position
+- `MOUSE_DUAL`: Mouse start and end positions (when dragging to select)
+- `SEL_FULL`: Full selection coordinates (see [`TextSelectionData`](#textselectiondata) structure for details)
+- `SEL_DETAILED`: Detailed selection coordinates (reserved for future use)
+
+####  **`SelectionHook.ClipboardMode`**
+
+- `DEFAULT`: Use clipboard for all programs
+- `INCLUDE_LIST`: Only use clipboard for programs in list
+- `EXCLUDE_LIST`: Use clipboard for all except programs in list
+
+### TypeScript Support
 
 This module includes TypeScript definitions. Import the module in TypeScript as:
 
 ```typescript
-import SelectionHook, { TextSelectionData } from 'selection-hook';
+import {
+  SelectionHookConstructor,
+  SelectionHookInstance,
+  SelectionConfig,
+  TextSelectionData,
+  MouseEventData,
+  MouseWheelEventData,
+  KeyboardEventData
+} from "selection-hook";
 
-const hook = new SelectionHook();
-hook.on('text-selection', (data: TextSelectionData) => {
-  // Type-safe access to selection data
-});
+// use `SelectionHookConstructor` for SelectionHook Class
+const SelectionHook: SelectionHookConstructor = require("selection-hook");
+// use `SelectionHookInstance` for SelectionHook instance
+const hook: SelectionHookInstance = new SelectionHook();
 ```
 
-## Examples
-
-### Basic Usage
-
-```javascript
-const SelectionHook = require('selection-hook');
-const hook = new SelectionHook();
-
-hook.on('text-selection', (data) => {
-  console.log(`Selected text: ${data.text}`);
-  console.log(`Program: ${data.programName}`);
-});
-
-hook.on('error', (error) => {
-  console.error('Error:', error.message);
-});
-
-hook.start();
-
-// Clean up when exiting
-process.on('exit', () => {
-  hook.cleanup();
-});
-```
-
-### Clipboard Mode
-
-```javascript
-const SelectionHook = require('selection-hook');
-const hook = new SelectionHook();
-
-// Only use clipboard fallback for specific applications
-hook.start();
-hook.setClipboardMode(
-  SelectionHook.ClipboardMode.INCLUDE_LIST, 
-  ['notepad.exe', 'wordpad']
-);
-
-hook.on('text-selection', (data) => {
-  console.log(`Selected text from ${data.programName}: ${data.text}`);
-});
-```
-
+See [`index.d.ts`](https://github.com/0xfullex/selection-hook/blob/main/index.d.ts) for details.

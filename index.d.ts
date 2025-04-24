@@ -47,7 +47,10 @@ export interface MouseEventData {
   x: number;
   /** Y coordinate of mouse pointer (px) */
   y: number;
-  /** Mouse button identifier (0=left, 1=right, 2=middle) */
+  /** Mouse button identifier,
+   * same as WebAPIs' MouseEvent.button
+   * Left = 0, Middle = 1, Right = 2, Back = 3, Forward = 4,
+   */
   button: number;
 }
 
@@ -105,7 +108,7 @@ export interface SelectionConfig {
   /** Enable passive mode where selection requires manual trigger */
   selectionPassiveMode?: boolean;
   /** Mode for clipboard fallback behavior */
-  clipboardMode?: SelectionHook.ClipboardMode;
+  clipboardMode?: (typeof SelectionHook.ClipboardMode)[keyof typeof SelectionHook.ClipboardMode];
   /** List of program names for clipboard mode filtering */
   programList?: string[];
 }
@@ -233,7 +236,10 @@ declare class SelectionHook extends EventEmitter {
    * @param {string[]} programList - Array of program names to include/exclude
    * @returns {boolean} Success status
    */
-  setClipboardMode(mode: SelectionHook.ClipboardMode, programList?: string[]): boolean;
+  setClipboardMode(
+    mode: (typeof SelectionHook.ClipboardMode)[keyof typeof SelectionHook.ClipboardMode],
+    programList?: string[]
+  ): boolean;
 
   /**
    * Set selection passive mode
