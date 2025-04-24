@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "selection_hook",
+      "target_name": "selection-hook",
       "cflags!": [ "-fno-exceptions" ],
       "cflags_cc!": [ "-fno-exceptions" ],
       "include_dirs": [

@@ -13,13 +13,12 @@ A native Node.js module with Node-API that allows monitoring text selections acr
   - Accessibility interfaces (legacy applications)
   - Focused control
   - Clipboard fallback (using simulated Ctrl+C, finetuned)
-- For Node.js and Electron
+- For Node.js v10+ and Electron v3+
+- Typescript supported
   
-## Requirements
+## Platform
 
-- Windows ( MacOS/Linux platforms are on the way)
-- Node-API v8+ (Node.js 18+ and Electron 23+)
-- node-gyp build tools
+Now only support Windows. MacOS/Linux platforms are on the way
 
 ## Installation
 
@@ -27,44 +26,30 @@ A native Node.js module with Node-API that allows monitoring text selections acr
 npm install selection-hook
 ```
 
+## Demo
+
+```bash
+npm run demo
+```
+
 ## Usage
+
+### Basic
 
 ```javascript
 const SelectionHook = require('selection-hook');
 
 // Create a new instance
+// You can design it as a singleton pattern to avoid resource consumption from multiple instantiations
 const selectionHook = new SelectionHook();
 
 // Listen for text selection events
 selectionHook.on('text-selection', (data) => {
   console.log('Selected text:', data.text);
-  console.log('From program:', data.programName);
-  console.log('Selection method:', data.method);
-  console.log('Position level:', data.posLevel);
-  
-  // Position coordinates are available depending on the position level
-  if (data.posLevel >= SelectionHook.PositionLevel.MOUSE_SINGLE) {
-    console.log('Mouse position:', data.mousePosStart);
-  }
-  
-  if (data.posLevel >= SelectionHook.PositionLevel.FULL) {
-    console.log('Selection start:', data.startTop);
-    console.log('Selection end:', data.endBottom);
-  }
 });
 
 // Start monitoring (with default configuration)
 selectionHook.start();
-
-// Or start with custom configuration
-selectionHook.start({
-  debug: true,                                      // Enable debug logging
-  enableMouseMoveEvent: false,                      // Disable high-CPU mouse move events
-  enableClipboard: true,                            // Enable clipboard fallback
-  selectionPassiveMode: false,                      // Enable automatic selection detection
-  clipboardMode: SelectionHook.ClipboardMode.DEFAULT, // Default clipboard mode
-  programList: []                                   // No program list
-});
 
 // When you want to get the current selection directly
 const currentSelection = selectionHook.getCurrentSelection();
@@ -72,8 +57,9 @@ if (currentSelection) {
   console.log('Current selection:', currentSelection.text);
 }
 
-// Clean up when done
+// Stop, you can start it again
 selectionHook.stop();
+// Clean up when done
 selectionHook.cleanup();
 ```
 
