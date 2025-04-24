@@ -224,6 +224,9 @@ private:
     // the cursor of mouse down and mouse up, for clipboard detection
     HCURSOR mouse_up_cursor = NULL;
 
+    // the control type of the UI Automation focused element
+    CONTROLTYPEID uia_control_type = UIA_WindowControlTypeId;
+
     // passive mode: only trigger when user call GetSelectionText
     bool is_selection_passive_mode = false;
 
@@ -1031,7 +1034,11 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
         return false;
 
     HCURSOR beamCursor = LoadCursor(NULL, IDC_IBEAM);
-    if (currentInstance->mouse_up_cursor != beamCursor)
+
+    /**
+     * uia_control_type: chrome devtools use UIA_GroupControlTypeId
+     */
+    if (currentInstance->mouse_up_cursor != beamCursor && uia_control_type != UIA_GroupControlTypeId)
         return false;
 
     return true;
@@ -1047,6 +1054,9 @@ bool SelectionHook::GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selecti
 
     bool result = false;
 
+    // init the control type to window
+    uia_control_type = UIA_WindowControlTypeId;
+
     // Get the window element
     IUIAutomationElement *pElement = nullptr;
     HRESULT hr = pUIAutomation->ElementFromHandle(hwnd, &pElement);
@@ -1054,204 +1064,288 @@ bool SelectionHook::GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selecti
     if (FAILED(hr) || !pElement)
         return false;
 
-    // Get the focused element
-    IUIAutomationElement *pFocusedElement = nullptr;
-    hr = pUIAutomation->GetFocusedElement(&pFocusedElement);
-
-    if (SUCCEEDED(hr) && pFocusedElement)
+    // Get the focused element - using local scope to ensure proper cleanup
     {
-        pFocusedElement->AddRef(); // Add reference for this scope
-    }
+        IUIAutomationElement *pFocusedElement = nullptr;
+        hr = pUIAutomation->GetFocusedElement(&pFocusedElement);
 
-    pElement->Release();
+        // Release window element as we don't need it anymore
+        pElement->Release();
+        pElement = nullptr;
 
-    if (FAILED(hr) || !pFocusedElement)
-        return false;
+        if (FAILED(hr) || !pFocusedElement)
+            return false;
 
-    // Get text pattern
-    IUIAutomationTextPattern *pTextPattern = nullptr;
-    hr = pFocusedElement->GetCurrentPatternAs(UIA_TextPatternId,
-                                              __uuidof(IUIAutomationTextPattern),
-                                              (void **)&pTextPattern);
-
-    if (SUCCEEDED(hr) && pTextPattern)
-    {
-        // First approach: Get selection directly
-        IUIAutomationTextRangeArray *pRanges = nullptr;
-        hr = pTextPattern->GetSelection(&pRanges);
-
-        if (SUCCEEDED(hr) && pRanges)
+        // Get ControlType for future use
+        CONTROLTYPEID controlType;
+        hr = pFocusedElement->get_CurrentControlType(&controlType);
+        if (SUCCEEDED(hr))
         {
-            int count = 0;
-            hr = pRanges->get_Length(&count);
+            uia_control_type = controlType;
+        }
 
-            if (SUCCEEDED(hr) && count > 0)
+        // Approach 1: Try with TextPattern - using local scope for cleanup
+        {
+            IUIAutomationTextPattern *pTextPattern = nullptr;
+            hr = pFocusedElement->GetCurrentPatternAs(UIA_TextPatternId,
+                                                      __uuidof(IUIAutomationTextPattern),
+                                                      (void **)&pTextPattern);
+
+            if (SUCCEEDED(hr) && pTextPattern)
             {
-                // Process each selection range
-                for (int i = 0; i < count; i++)
+                // First approach: Get selection directly
+                IUIAutomationTextRangeArray *pRanges = nullptr;
+                hr = pTextPattern->GetSelection(&pRanges);
+
+                if (SUCCEEDED(hr) && pRanges)
                 {
-                    IUIAutomationTextRange *pRange = nullptr;
-                    hr = pRanges->GetElement(i, &pRange);
+                    int count = 0;
+                    hr = pRanges->get_Length(&count);
 
-                    if (SUCCEEDED(hr) && pRange)
+                    if (SUCCEEDED(hr) && count > 0)
                     {
-                        BSTR bstr = nullptr;
-                        hr = pRange->GetText(-1, &bstr);
-
-                        if (SUCCEEDED(hr) && bstr)
+                        // Process each selection range
+                        for (int i = 0; i < count && !result; i++) // Continue until we find a valid selection
                         {
-                            selectionInfo.text = std::wstring(bstr);
+                            IUIAutomationTextRange *pRange = nullptr;
+                            hr = pRanges->GetElement(i, &pRange);
 
+                            if (SUCCEEDED(hr) && pRange)
+                            {
+                                BSTR bstr = nullptr;
+                                hr = pRange->GetText(-1, &bstr);
+
+                                if (SUCCEEDED(hr) && bstr)
+                                {
+                                    selectionInfo.text = std::wstring(bstr);
+
+                                    if (!selectionInfo.text.empty())
+                                    {
+                                        // Get range coordinates
+                                        result = SetTextRangeCoordinates(pRange, selectionInfo);
+                                    }
+                                    SysFreeString(bstr);
+                                }
+                                pRange->Release();
+                            }
+                        }
+                    }
+                    pRanges->Release();
+                }
+
+                // Second approach: Try to get document range if first approach failed
+                if (!result)
+                {
+                    IUIAutomationTextRange *pDocRange = nullptr;
+                    hr = pTextPattern->get_DocumentRange(&pDocRange);
+
+                    if (SUCCEEDED(hr) && pDocRange)
+                    {
+                        bool hasSelection = false;
+
+                        // First check if there is an active selection without expanding
+                        {
+                            // Check if there is a selection (by querying selection attributes)
+                            VARIANT varSel;
+                            VariantInit(&varSel);
+                            BSTR bstr = nullptr;
+
+                            HRESULT attrHr = pDocRange->GetAttributeValue(UIA_IsSelectionActivePropertyId, &varSel);
+                            hr = pDocRange->GetText(-1, &bstr);
+
+                            if (SUCCEEDED(hr) && SUCCEEDED(attrHr) && bstr &&
+                                (varSel.vt == VT_BOOL) && (varSel.boolVal == VARIANT_TRUE))
+                            {
+                                // We have an active selection
+                                std::wstring selectedText = std::wstring(bstr);
+                                if (!selectedText.empty())
+                                {
+                                    selectionInfo.text = selectedText;
+                                    if (SetTextRangeCoordinates(pDocRange, selectionInfo))
+                                    {
+                                        result = true;
+                                        hasSelection = true;
+                                    }
+                                }
+                            }
+
+                            if (bstr)
+                                SysFreeString(bstr);
+                            VariantClear(&varSel);
+                        }
+
+                        // If no selection found, try expanding to document
+                        if (!hasSelection)
+                        {
+                            hr = pDocRange->ExpandToEnclosingUnit(TextUnit_Document);
+
+                            if (SUCCEEDED(hr))
+                            {
+                                BSTR bstr = nullptr;
+                                hr = pDocRange->GetText(-1, &bstr);
+
+                                if (SUCCEEDED(hr) && bstr)
+                                {
+                                    // Check for active selection
+                                    VARIANT varSel;
+                                    VariantInit(&varSel);
+                                    hr = pDocRange->GetAttributeValue(UIA_IsSelectionActivePropertyId, &varSel);
+
+                                    if (SUCCEEDED(hr) && (varSel.vt == VT_BOOL) && (varSel.boolVal == VARIANT_TRUE))
+                                    {
+                                        std::wstring docText = std::wstring(bstr);
+                                        if (!docText.empty())
+                                        {
+                                            selectionInfo.text = docText;
+                                            if (SetTextRangeCoordinates(pDocRange, selectionInfo))
+                                            {
+                                                result = true;
+                                            }
+                                        }
+                                    }
+
+                                    VariantClear(&varSel);
+                                    SysFreeString(bstr);
+                                }
+                            }
+                        }
+                        pDocRange->Release();
+                    }
+                }
+                pTextPattern->Release();
+            }
+        }
+
+        // Third approach: Try with LegacyIAccessible pattern if other methods failed
+        if (!result)
+        {
+            IUIAutomationLegacyIAccessiblePattern *pLegacyPattern = nullptr;
+            hr = pFocusedElement->GetCurrentPatternAs(UIA_LegacyIAccessiblePatternId,
+                                                      __uuidof(IUIAutomationLegacyIAccessiblePattern),
+                                                      (void **)&pLegacyPattern);
+
+            if (SUCCEEDED(hr) && pLegacyPattern)
+            {
+                // Create and initialize variant for CHILDID_SELF parameter
+                VARIANT varSelf;
+                VariantInit(&varSelf);
+                varSelf.vt = VT_I4;
+                varSelf.lVal = CHILDID_SELF;
+
+                IAccessible *pAcc = nullptr;
+                hr = pLegacyPattern->GetIAccessible(&pAcc);
+
+                if (SUCCEEDED(hr) && pAcc)
+                {
+                    // Try to get selected text from IAccessible
+                    VARIANT varSel;
+                    VariantInit(&varSel);
+                    hr = pAcc->get_accSelection(&varSel);
+
+                    if (SUCCEEDED(hr) && varSel.vt != VT_EMPTY)
+                    {
+                        // Process selection based on variant type
+                        if (varSel.vt == VT_BSTR && varSel.bstrVal)
+                        {
+                            selectionInfo.text = std::wstring(varSel.bstrVal);
                             if (!selectionInfo.text.empty())
                             {
-                                // Get range coordinates
-                                SetTextRangeCoordinates(pRange, selectionInfo);
                                 result = true;
-                                SysFreeString(bstr);
-                                pRange->Release();
-                                break; // Found text, stop processing
                             }
-                            SysFreeString(bstr);
                         }
-                        pRange->Release();
-                    }
-                }
-            }
-
-            pRanges->Release();
-
-            if (result)
-            {
-                pTextPattern->Release();
-                pFocusedElement->Release();
-                return true;
-            }
-        }
-
-        // Second approach: Try to get document range
-        IUIAutomationTextRange *pDocRange = nullptr;
-        hr = pTextPattern->get_DocumentRange(&pDocRange);
-
-        if (SUCCEEDED(hr) && pDocRange)
-        {
-            // Try to get selected text without expanding
-            BSTR bstr = nullptr;
-            hr = pDocRange->GetText(-1, &bstr);
-            bool hasSelection = false;
-
-            if (SUCCEEDED(hr) && bstr)
-            {
-                // Check if there is a selection (by querying selection attributes)
-                VARIANT varSel;
-                VariantInit(&varSel);
-                HRESULT attrHr = pDocRange->GetAttributeValue(UIA_IsSelectionActivePropertyId, &varSel);
-
-                if (SUCCEEDED(attrHr) && (varSel.vt == VT_BOOL) && (varSel.boolVal == VARIANT_TRUE))
-                {
-                    // We have an active selection
-                    std::wstring selectedText = std::wstring(bstr);
-                    if (!selectedText.empty())
-                    {
-                        selectionInfo.text = selectedText;
-                        SetTextRangeCoordinates(pDocRange, selectionInfo);
-                        result = true;
-                        hasSelection = true;
-                    }
-                }
-
-                SysFreeString(bstr);
-                VariantClear(&varSel);
-            }
-
-            // If no selection found, try expanding to document
-            if (!hasSelection)
-            {
-                hr = pDocRange->ExpandToEnclosingUnit(TextUnit_Document);
-
-                if (SUCCEEDED(hr))
-                {
-                    bstr = nullptr;
-                    hr = pDocRange->GetText(-1, &bstr);
-
-                    if (SUCCEEDED(hr) && bstr)
-                    {
-                        // Check for active selection
-                        VARIANT varSel;
-                        VariantInit(&varSel);
-                        hr = pDocRange->GetAttributeValue(UIA_IsSelectionActivePropertyId, &varSel);
-
-                        if (SUCCEEDED(hr) && (varSel.vt == VT_BOOL) && (varSel.boolVal == VARIANT_TRUE))
+                        else if (varSel.vt == VT_DISPATCH && varSel.pdispVal)
                         {
-                            std::wstring docText = std::wstring(bstr);
-                            if (!docText.empty())
+                            // Handle IDispatch (object) selection
+                            IAccessible *pSelAcc = nullptr;
+                            HRESULT dispHr = varSel.pdispVal->QueryInterface(IID_IAccessible, (void **)&pSelAcc);
+
+                            if (SUCCEEDED(dispHr) && pSelAcc)
                             {
-                                selectionInfo.text = docText;
-                                SetTextRangeCoordinates(pDocRange, selectionInfo);
-                                result = true;
+                                VARIANT childSelf;
+                                VariantInit(&childSelf);
+                                childSelf.vt = VT_I4;
+                                childSelf.lVal = CHILDID_SELF;
+
+                                // Try get_accName first, then fall back to get_accValue
+                                BSTR bstr = nullptr;
+                                if (SUCCEEDED(pSelAcc->get_accName(childSelf, &bstr)) && bstr && SysStringLen(bstr) > 0)
+                                {
+                                    selectionInfo.text = std::wstring(bstr);
+                                    result = !selectionInfo.text.empty();
+                                }
+                                else
+                                {
+                                    if (bstr)
+                                        SysFreeString(bstr);
+                                    if (SUCCEEDED(pSelAcc->get_accValue(childSelf, &bstr)) && bstr)
+                                    {
+                                        selectionInfo.text = std::wstring(bstr);
+                                        result = !selectionInfo.text.empty();
+                                    }
+                                }
+
+                                if (bstr)
+                                    SysFreeString(bstr);
+                                VariantClear(&childSelf);
+                                pSelAcc->Release();
                             }
                         }
-
-                        VariantClear(&varSel);
-                        SysFreeString(bstr);
-                    }
-                }
-            }
-
-            pDocRange->Release();
-        }
-
-        pTextPattern->Release();
-    }
-
-    // Third approach: Try with LegacyIAccessible pattern
-    if (!result)
-    {
-        IUIAutomationLegacyIAccessiblePattern *pLegacyPattern = nullptr;
-        hr = pFocusedElement->GetCurrentPatternAs(UIA_LegacyIAccessiblePatternId,
-                                                  __uuidof(IUIAutomationLegacyIAccessiblePattern),
-                                                  (void **)&pLegacyPattern);
-
-        if (SUCCEEDED(hr) && pLegacyPattern)
-        {
-            // Try with IAccessible interface
-            IAccessible *pAcc = nullptr;
-            VARIANT varSelf;
-            VariantInit(&varSelf);
-            varSelf.vt = VT_I4;
-            varSelf.lVal = CHILDID_SELF;
-
-            hr = pLegacyPattern->GetIAccessible(&pAcc);
-
-            if (SUCCEEDED(hr) && pAcc)
-            {
-                // Try to get selected text from IAccessible
-                VARIANT varSel;
-                VariantInit(&varSel);
-                hr = pAcc->get_accSelection(&varSel);
-
-                if (SUCCEEDED(hr) && varSel.vt != VT_EMPTY)
-                {
-                    // Process selection from IAccessible
-                    // This part is similar to GetTextViaAccessible method
-                    if (varSel.vt == VT_BSTR && varSel.bstrVal)
-                    {
-                        selectionInfo.text = std::wstring(varSel.bstrVal);
-                        if (!selectionInfo.text.empty())
+                        // Handle array selection if needed
+                        else if ((varSel.vt & VT_ARRAY) && varSel.parray)
                         {
-                            result = true;
+                            // Process array selection (implementation depends on specific requirements)
+                            // This is a simplified example - expand as needed
+                            SAFEARRAY *pArray = varSel.parray;
+                            LONG lLower, lUpper;
+
+                            if (SUCCEEDED(SafeArrayGetLBound(pArray, 1, &lLower)) &&
+                                SUCCEEDED(SafeArrayGetUBound(pArray, 1, &lUpper)) &&
+                                lLower <= lUpper)
+                            {
+                                // For simplicity, just process the first element
+                                VARIANT varItem;
+                                VariantInit(&varItem);
+
+                                if (SUCCEEDED(SafeArrayGetElement(pArray, &lLower, &varItem)))
+                                {
+                                    if (varItem.vt == VT_DISPATCH && varItem.pdispVal)
+                                    {
+                                        IAccessible *pItemAcc = nullptr;
+                                        if (SUCCEEDED(varItem.pdispVal->QueryInterface(IID_IAccessible, (void **)&pItemAcc)))
+                                        {
+                                            VARIANT itemChild;
+                                            VariantInit(&itemChild);
+                                            itemChild.vt = VT_I4;
+                                            itemChild.lVal = CHILDID_SELF;
+
+                                            BSTR bstr = nullptr;
+                                            if (SUCCEEDED(pItemAcc->get_accValue(itemChild, &bstr)) && bstr)
+                                            {
+                                                selectionInfo.text = std::wstring(bstr);
+                                                result = !selectionInfo.text.empty();
+                                                SysFreeString(bstr);
+                                            }
+
+                                            VariantClear(&itemChild);
+                                            pItemAcc->Release();
+                                        }
+                                    }
+                                    VariantClear(&varItem);
+                                }
+                            }
                         }
                     }
                     VariantClear(&varSel);
+                    pAcc->Release();
                 }
-
-                pAcc->Release();
+                VariantClear(&varSelf);
+                pLegacyPattern->Release();
             }
-
-            pLegacyPattern->Release();
         }
-    }
 
-    pFocusedElement->Release();
+        // Always release the focused element
+        pFocusedElement->Release();
+    }
 
     return result;
 }

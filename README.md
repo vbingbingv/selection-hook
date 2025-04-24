@@ -12,7 +12,7 @@ A native Node.js module with Node-API that allows monitoring text selections acr
   - UI Automation (modern applications)
   - Accessibility interfaces (legacy applications)
   - Focused control
-  - Clipboard fallback (using simulated Ctrl+C, finetuned)
+  - Clipboard fallback (using simulated Ctrl+C, and finetuned)
 - For Node.js v10+ and Electron v3+
 - Typescript supported
   
@@ -24,6 +24,13 @@ Now only support Windows. MacOS/Linux platforms are on the way
 
 ```bash
 npm install selection-hook
+```
+The npm package includes pre-built .node file, so no rebuilding is needed during usage. If you encounter rebuilding issues when using Electron, you can add following values to your electron-build configuration.
+
+```
+rebuildConfig: {
+    onlyModules: [],
+},
 ```
 
 ## Demo
