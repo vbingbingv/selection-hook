@@ -1852,24 +1852,54 @@ bool SelectionHook::SetTextRangeCoordinates(IUIAutomationTextRange *pRange, Text
 
         int rectCount = (upperBound - lowerBound + 1) / 4;
 
-        if (rectCount > 0)
+        // Find first rectangle with width > 1 pixel and height < 100 pixel
+        int firstValidRectIndex = -1;
+        for (int i = 0; i < rectCount; i++)
         {
-            // Use first rectangle's top-left as start position (first paragraph left-top)
-            selectionInfo.startTop.x = static_cast<LONG>(pRects[0]);
-            selectionInfo.startTop.y = static_cast<LONG>(pRects[1]);
+            int rectIndex = i * 4;
+            double width = pRects[rectIndex + 2];
+            double height = pRects[rectIndex + 3];
+
+            if (width > 1.0 && height < 100.0)
+            {
+                firstValidRectIndex = rectIndex;
+                break;
+            }
+        }
+
+        // Find last rectangle with width > 1 pixel and height < 100 pixel
+        int lastValidRectIndex = -1;
+        for (int i = rectCount - 1; i >= 0; i--)
+        {
+            int rectIndex = i * 4;
+            double width = pRects[rectIndex + 2];
+            double height = pRects[rectIndex + 3];
+
+            if (width > 1.0 && height < 100.0)
+            {
+                lastValidRectIndex = rectIndex;
+                break;
+            }
+        }
+
+        // If we found valid rectangles
+        if (firstValidRectIndex >= 0 && lastValidRectIndex >= 0)
+        {
+            // Use first valid rectangle's top-left as start position (first paragraph left-top)
+            selectionInfo.startTop.x = static_cast<LONG>(pRects[firstValidRectIndex]);
+            selectionInfo.startTop.y = static_cast<LONG>(pRects[firstValidRectIndex + 1]);
 
             // Set first paragraph's left-bottom point
-            selectionInfo.startBottom.x = static_cast<LONG>(pRects[0]);
-            selectionInfo.startBottom.y = static_cast<LONG>(pRects[1] + pRects[3]); // top + height = bottom
+            selectionInfo.startBottom.x = static_cast<LONG>(pRects[firstValidRectIndex]);
+            selectionInfo.startBottom.y = static_cast<LONG>(pRects[firstValidRectIndex + 1] + pRects[firstValidRectIndex + 3]); // top + height = bottom
 
-            // Use last rectangle's bottom-right as end position (last paragraph right-bottom)
-            int lastRectIndex = (rectCount - 1) * 4;
-            selectionInfo.endBottom.x = static_cast<LONG>(pRects[lastRectIndex] + pRects[lastRectIndex + 2]);     // left + width = right
-            selectionInfo.endBottom.y = static_cast<LONG>(pRects[lastRectIndex + 1] + pRects[lastRectIndex + 3]); // top + height = bottom
+            // Use last valid rectangle's bottom-right as end position (last paragraph right-bottom)
+            selectionInfo.endBottom.x = static_cast<LONG>(pRects[lastValidRectIndex] + pRects[lastValidRectIndex + 2]);     // left + width = right
+            selectionInfo.endBottom.y = static_cast<LONG>(pRects[lastValidRectIndex + 1] + pRects[lastValidRectIndex + 3]); // top + height = bottom
 
             // Set last paragraph's right-top point
-            selectionInfo.endTop.x = static_cast<LONG>(pRects[lastRectIndex] + pRects[lastRectIndex + 2]); // right
-            selectionInfo.endTop.y = static_cast<LONG>(pRects[lastRectIndex + 1]);                         // top
+            selectionInfo.endTop.x = static_cast<LONG>(pRects[lastValidRectIndex] + pRects[lastValidRectIndex + 2]); // right
+            selectionInfo.endTop.y = static_cast<LONG>(pRects[lastValidRectIndex + 1]);                              // top
 
             selectionInfo.posLevel = SelectionPositionLevel::Full;
 
@@ -1877,9 +1907,6 @@ bool SelectionHook::SetTextRangeCoordinates(IUIAutomationTextRange *pRange, Text
             SafeArrayDestroy(pRectArray);
             return true;
         }
-
-        SafeArrayUnaccessData(pRectArray);
-        SafeArrayDestroy(pRectArray);
     }
 
     return false;
