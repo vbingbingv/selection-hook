@@ -3,6 +3,10 @@
   "version": "0.9.7",
   "description": "A native Node.js module with Node-API that allows monitoring text selections across applications using multiple methods.",
   "author": "0xfullex",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0xfullex/selection-hook"
+  },
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {

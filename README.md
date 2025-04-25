@@ -1,4 +1,5 @@
 # Text Selection Hook for Node.js and Electron
+[![npm version](https://img.shields.io/npm/v/selection-hook?style=flat)](https://www.npmjs.org/package/selection-hook)
 
 A native Node.js module with Node-API that allows monitoring text selections across applications using multiple methods.
 
