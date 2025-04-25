@@ -36,7 +36,7 @@ npm install selection-hook
 
 The npm package ships with a pre-built `.node` file — no rebuilding needed. For Electron rebuild issues, add these values to your `electron-builder` config to avoid rebuilding:
 
-```
+```javascript
 rebuildConfig: {
     onlyModules: [],
 },

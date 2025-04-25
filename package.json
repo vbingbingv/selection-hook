@@ -1,6 +1,6 @@
 {
   "name": "selection-hook",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "A native Node.js module with Node-API that allows monitoring text selections across applications using multiple methods.",
   "author": "0xfullex",
   "main": "index.js",
