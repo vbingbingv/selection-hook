@@ -19,6 +19,11 @@
  * Usage:
  * This module exposes a JavaScript API through index.js that allows
  * applications to monitor text selection events system-wide.
+ *
+ *
+ * Copyright (c) 2025 0xfullex (https://github.com/0xfullex/selection-hook)
+ * Licensed under the MIT License
+ *
  */
 #define WIN32_LEAN_AND_MEAN 1
 
@@ -39,6 +44,7 @@
 
 #include "lib/string_pool.h"
 #include "lib/utils.h"
+#include "lib/clipboard.h"
 
 #pragma comment(lib, "Oleacc.lib")
 #pragma comment(lib, "UIAutomationCore.lib")
@@ -202,6 +208,8 @@ private:
     void SetClipboardMode(const Napi::CallbackInfo &info);
     void SetSelectionPassiveMode(const Napi::CallbackInfo &info);
     Napi::Value GetCurrentSelection(const Napi::CallbackInfo &info);
+    Napi::Value WriteToClipboard(const Napi::CallbackInfo &info);
+    Napi::Value ReadFromClipboard(const Napi::CallbackInfo &info);
 
     // UI Automation objects
     IUIAutomation *pUIAutomation = nullptr;
@@ -381,14 +389,14 @@ SelectionHook::~SelectionHook()
 }
 
 /**
- * Initialize and export the class to JavaScript
+ * NAPI: Initialize and export the class to JavaScript
  */
 Napi::Object SelectionHook::Init(Napi::Env env, Napi::Object exports)
 {
     Napi::HandleScope scope(env);
 
     // Define class with JavaScript-accessible methods
-    Napi::Function func = DefineClass(env, "TextSelectionHook", {InstanceMethod("start", &SelectionHook::Start), InstanceMethod("stop", &SelectionHook::Stop), InstanceMethod("enableMouseMoveEvent", &SelectionHook::EnableMouseMoveEvent), InstanceMethod("disableMouseMoveEvent", &SelectionHook::DisableMouseMoveEvent), InstanceMethod("enableClipboard", &SelectionHook::EnableClipboard), InstanceMethod("disableClipboard", &SelectionHook::DisableClipboard), InstanceMethod("setClipboardMode", &SelectionHook::SetClipboardMode), InstanceMethod("setSelectionPassiveMode", &SelectionHook::SetSelectionPassiveMode), InstanceMethod("getCurrentSelection", &SelectionHook::GetCurrentSelection)});
+    Napi::Function func = DefineClass(env, "TextSelectionHook", {InstanceMethod("start", &SelectionHook::Start), InstanceMethod("stop", &SelectionHook::Stop), InstanceMethod("enableMouseMoveEvent", &SelectionHook::EnableMouseMoveEvent), InstanceMethod("disableMouseMoveEvent", &SelectionHook::DisableMouseMoveEvent), InstanceMethod("enableClipboard", &SelectionHook::EnableClipboard), InstanceMethod("disableClipboard", &SelectionHook::DisableClipboard), InstanceMethod("setClipboardMode", &SelectionHook::SetClipboardMode), InstanceMethod("setSelectionPassiveMode", &SelectionHook::SetSelectionPassiveMode), InstanceMethod("getCurrentSelection", &SelectionHook::GetCurrentSelection), InstanceMethod("writeToClipboard", &SelectionHook::WriteToClipboard), InstanceMethod("readFromClipboard", &SelectionHook::ReadFromClipboard)});
 
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
@@ -398,7 +406,7 @@ Napi::Object SelectionHook::Init(Napi::Env env, Napi::Object exports)
 }
 
 /**
- * Start monitoring text selections
+ * NAPI: Start monitoring text selections
  */
 void SelectionHook::Start(const Napi::CallbackInfo &info)
 {
@@ -488,7 +496,7 @@ void SelectionHook::Start(const Napi::CallbackInfo &info)
 }
 
 /**
- * Stop monitoring text selections
+ * NAPI: Stop monitoring text selections
  */
 void SelectionHook::Stop(const Napi::CallbackInfo &info)
 {
@@ -536,7 +544,7 @@ void SelectionHook::Stop(const Napi::CallbackInfo &info)
 }
 
 /**
- * Get the currently selected text from the active window
+ * NAPI: Get the currently selected text from the active window
  */
 Napi::Value SelectionHook::GetCurrentSelection(const Napi::CallbackInfo &info)
 {
@@ -572,7 +580,7 @@ Napi::Value SelectionHook::GetCurrentSelection(const Napi::CallbackInfo &info)
 }
 
 /**
- * Enable mouse move events
+ * NAPI: Enable mouse move events
  */
 void SelectionHook::EnableMouseMoveEvent(const Napi::CallbackInfo &info)
 {
@@ -580,7 +588,7 @@ void SelectionHook::EnableMouseMoveEvent(const Napi::CallbackInfo &info)
 }
 
 /**
- * Disable mouse move events to reduce CPU usage
+ * NAPI: Disable mouse move events to reduce CPU usage
  */
 void SelectionHook::DisableMouseMoveEvent(const Napi::CallbackInfo &info)
 {
@@ -588,7 +596,7 @@ void SelectionHook::DisableMouseMoveEvent(const Napi::CallbackInfo &info)
 }
 
 /**
- * Enable clipboard fallback
+ * NAPI: Enable clipboard fallback
  */
 void SelectionHook::EnableClipboard(const Napi::CallbackInfo &info)
 {
@@ -596,7 +604,7 @@ void SelectionHook::EnableClipboard(const Napi::CallbackInfo &info)
 }
 
 /**
- * Disable clipboard fallback
+ * NAPI: Disable clipboard fallback
  */
 void SelectionHook::DisableClipboard(const Napi::CallbackInfo &info)
 {
@@ -604,7 +612,7 @@ void SelectionHook::DisableClipboard(const Napi::CallbackInfo &info)
 }
 
 /**
- * Set the clipboard include list
+ * NAPI: Set the clipboard include list
  */
 void SelectionHook::SetClipboardMode(const Napi::CallbackInfo &info)
 {
@@ -646,6 +654,9 @@ void SelectionHook::SetClipboardMode(const Napi::CallbackInfo &info)
     }
 }
 
+/**
+ * NAPI: Set selection passive mode
+ */
 void SelectionHook::SetSelectionPassiveMode(const Napi::CallbackInfo &info)
 {
     Napi::Env env = info.Env();
@@ -657,6 +668,66 @@ void SelectionHook::SetSelectionPassiveMode(const Napi::CallbackInfo &info)
     }
 
     is_selection_passive_mode = info[0u].As<Napi::Boolean>().Value();
+}
+
+/**
+ * NAPI: Write string to clipboard
+ */
+Napi::Value SelectionHook::WriteToClipboard(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+
+    // Validate parameters
+    if (info.Length() < 1 || !info[0].IsString())
+    {
+        Napi::TypeError::New(env, "String expected as argument").ThrowAsJavaScriptException();
+        return Napi::Boolean::New(env, false);
+    }
+
+    try
+    {
+        // Get string from JavaScript
+        std::string utf8Text = info[0].As<Napi::String>().Utf8Value();
+        std::wstring wideText = StringPool::Utf8ToWide(utf8Text);
+
+        // Write to clipboard using the extracted function
+        bool result = WriteClipboard(wideText);
+        return Napi::Boolean::New(env, result);
+    }
+    catch (const std::exception &e)
+    {
+        Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+        return Napi::Boolean::New(env, false);
+    }
+}
+
+/**
+ * NAPI: Read string from clipboard
+ */
+Napi::Value SelectionHook::ReadFromClipboard(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+
+    try
+    {
+        // Read from clipboard
+        std::wstring clipboardContent;
+        bool result = ReadClipboard(clipboardContent);
+
+        if (!result)
+        {
+            return env.Null();
+        }
+
+        // Convert to UTF-8 and return as string
+        std::string utf8Text = StringPool::WideToUtf8(clipboardContent);
+        return Napi::String::New(env, utf8Text);
+    }
+    catch (const std::exception &e)
+    {
+        Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
 }
 
 /**
@@ -1616,88 +1687,6 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     constexpr DWORD CLIPBOARD_WAIT_TIMEOUT = 150; // milliseconds
     constexpr DWORD SLEEP_INTERVAL = 5;           // milliseconds
 
-    // Define optimized clipboard read operation
-    auto readClipboard = [](std::wstring &content, bool isClipboardOpened = false) -> bool
-    {
-        if (!isClipboardOpened && !OpenClipboard(nullptr))
-            return false;
-
-        bool success = false;
-        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-        if (hData)
-        {
-            // Handle Unicode text (most common)
-            wchar_t *pText = static_cast<wchar_t *>(GlobalLock(hData));
-            if (pText)
-            {
-                content = pText;
-                GlobalUnlock(hData);
-                success = true;
-            }
-        }
-        else
-        {
-            // Fallback to CF_TEXT if CF_UNICODETEXT is not available
-            hData = GetClipboardData(CF_TEXT);
-            if (hData)
-            {
-                char *pText = static_cast<char *>(GlobalLock(hData));
-                if (pText)
-                {
-                    // Convert ANSI text to wide string
-                    int length = MultiByteToWideChar(CP_ACP, 0, pText, -1, nullptr, 0);
-                    if (length > 0)
-                    {
-                        std::vector<wchar_t> buffer(length);
-                        MultiByteToWideChar(CP_ACP, 0, pText, -1, buffer.data(), length);
-                        content = buffer.data();
-                        success = true;
-                    }
-                    GlobalUnlock(hData);
-                }
-            }
-        }
-
-        if (!isClipboardOpened)
-            CloseClipboard();
-
-        return success;
-    };
-
-    // Define optimized clipboard write operation
-    auto writeClipboard = [](const std::wstring &content) -> bool
-    {
-        if (!OpenClipboard(nullptr))
-            return false;
-
-        EmptyClipboard();
-        bool success = false;
-
-        if (!content.empty())
-        {
-            size_t size = (content.size() + 1) * sizeof(wchar_t);
-            HANDLE hData = GlobalAlloc(GMEM_MOVEABLE, size);
-            if (hData)
-            {
-                wchar_t *pText = static_cast<wchar_t *>(GlobalLock(hData));
-                if (pText)
-                {
-                    memcpy(pText, content.c_str(), size);
-                    GlobalUnlock(hData);
-                    SetClipboardData(CF_UNICODETEXT, hData);
-                    success = true;
-                }
-                else
-                {
-                    GlobalFree(hData);
-                }
-            }
-        }
-
-        CloseClipboard();
-        return success;
-    };
-
     bool isCtrlPressed = false;
     bool isCPressed = false;
     bool isXPressed = false;
@@ -1753,7 +1742,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     std::wstring existingContent;
     if (OpenClipboard(nullptr))
     {
-        readClipboard(existingContent, true);
+        ReadClipboard(existingContent, true);
         EmptyClipboard();
         CloseClipboard();
     }
@@ -1770,7 +1759,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     {
         // Restore clipboard and exit if listener creation failed
         if (!existingContent.empty())
-            writeClipboard(existingContent);
+            WriteClipboard(existingContent);
         return false;
     }
 
@@ -1780,7 +1769,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     {
         DestroyWindow(hwndClipboardListener);
         if (!existingContent.empty())
-            writeClipboard(existingContent);
+            WriteClipboard(existingContent);
         return false;
     }
 
@@ -1823,16 +1812,16 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     if (!hasNewContent)
     {
         if (!existingContent.empty())
-            writeClipboard(existingContent);
+            WriteClipboard(existingContent);
         return false;
     }
 
     // Read the new clipboard content
-    bool readSuccess = readClipboard(selectionInfo.text);
+    bool readSuccess = ReadClipboard(selectionInfo.text);
 
     // Restore previous clipboard content
     if (!existingContent.empty())
-        writeClipboard(existingContent);
+        WriteClipboard(existingContent);
 
     if (!readSuccess || selectionInfo.text.empty())
         return false;

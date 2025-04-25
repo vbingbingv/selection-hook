@@ -20,6 +20,8 @@ Maybe the first-ever open-source, fully functional text selection tool.
   - *Accessibility APIs* (legacy apps)
   - *Focused control* (active input fields)
   - *Clipboard fallback* (simulated `Ctrl+C` with optimizations)
+- **Clipboard**
+  - Read/write clipboard
 - **Compatibility**
   - Node.js `v10+` | Electron `v3+`
   - TypeScript support included.
@@ -134,6 +136,12 @@ const hook = new SelectionHook();
   
 #### **`setSelectionPassiveMode(passive: boolean): boolean`**  
   Set passive mode for selection (only triggered by getCurrentSelection, `text-selection` event will not be emitted). 
+  
+#### **`writeToClipboard(text: string): boolean`**  
+  Write text to the system clipboard. This is useful for implementing custom copy functions.
+  
+#### **`readFromClipboard(): string | null`**  
+  Read text from the system clipboard. Returns clipboard text content as string, or null if clipboard is empty or contains non-text data.
   
 #### **`isRunning(): boolean`**  
   Check if selection-hook is currently running.

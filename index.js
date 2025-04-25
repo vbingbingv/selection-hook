@@ -3,6 +3,9 @@
  *
  * This module provides a Node.js interface for monitoring text selections
  * across applications on Windows using UI Automation and Accessibility APIs.
+ *
+ * Copyright (c) 2025 0xfullex (https://github.com/0xfullex/selection-hook)
+ * Licensed under the MIT License
  */
 
 const EventEmitter = require("events");
@@ -276,6 +279,48 @@ class SelectionHook extends EventEmitter {
     } catch (err) {
       this._handleError("Failed to set selection passive mode", err);
       return false;
+    }
+  }
+
+  /**
+   * Write text to clipboard
+   * @param {string} text - Text to write to clipboard
+   * @returns {boolean} Success status
+   */
+  writeToClipboard(text) {
+    if (!this._instance || !this._running) {
+      this._logDebug("Text selection hook not running");
+      return false;
+    }
+
+    if (typeof text !== "string") {
+      this._handleError("Text must be a string", new Error("Invalid argument"));
+      return false;
+    }
+
+    try {
+      return this._instance.writeToClipboard(text);
+    } catch (err) {
+      this._handleError("Failed to write text to clipboard", err);
+      return false;
+    }
+  }
+
+  /**
+   * Read text from clipboard
+   * @returns {string|null} Text from clipboard or null if empty or error
+   */
+  readFromClipboard() {
+    if (!this._instance || !this._running) {
+      this._logDebug("Text selection hook not running");
+      return null;
+    }
+
+    try {
+      return this._instance.readFromClipboard();
+    } catch (err) {
+      this._handleError("Failed to read text from clipboard", err);
+      return null;
     }
   }
 

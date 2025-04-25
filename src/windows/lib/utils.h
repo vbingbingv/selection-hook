@@ -5,6 +5,7 @@
 
 #include <windows.h>
 #include <string>
+#include <vector>
 
 /**
  * Check if string is empty after trimming whitespace

@@ -98,6 +98,8 @@ function printWelcomeMessage() {
   console.log("  B - Toggle clipboard fallback (default: OFF)");
   console.log("  L - Toggle clipboard mode (DEFAULT → EXCLUDE_LIST → INCLUDE_LIST)");
   console.log("  P - Toggle passive mode (default: OFF)");
+  console.log("  W - Write text 'Test clipboard write from selection-hook' to clipboard");
+  console.log("  R - Read text from clipboard");
   console.log("  ? - Show help");
   console.log("  Ctrl+C - Exit program");
   console.log("\nIn passive mode, press Alt key to trigger text selection");
@@ -338,8 +340,33 @@ function handleKeyPress(key) {
       togglePassiveMode();
       break;
 
-    case "?": // Show help
+    case "w":
+      // Write test text to clipboard
+      const testText = "Test clipboard write from selection-hook";
+      const success = hook.writeToClipboard(testText);
+      if (success) {
+        console.log(colors.success, `Successfully wrote text to clipboard: "${testText}"`);
+      } else {
+        console.log(colors.error, "Failed to write text to clipboard");
+      }
+      break;
+
+    case "r":
+      // Read text from clipboard
+      const clipboardText = hook.readFromClipboard();
+      if (clipboardText) {
+        console.log(colors.success, `Text read from clipboard: "${clipboardText}"`);
+      } else {
+        console.log(colors.warning, "Failed to read text from clipboard");
+      }
+      break;
+
+    case "?":
+      // Show help
       printWelcomeMessage();
+      break;
+
+    default:
       break;
   }
 }

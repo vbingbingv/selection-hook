@@ -1,7 +1,7 @@
 {
   "name": "selection-hook",
-  "version": "0.9.7",
-  "description": "A native Node.js module with Node-API that allows monitoring text selections across applications using multiple methods.",
+  "version": "0.9.8",
+  "description": "Text selection monitoring of native Node.js module with N-API across applications",
   "author": "0xfullex",
   "repository": {
     "type": "git",
@@ -16,11 +16,18 @@
     "demo": "node --trace-deprecation --force-node-api-uncaught-exceptions-policy=true examples/node-demo.js"
   },
   "keywords": [
+    "node",
+    "electron",
     "text",
     "selection",
-    "hook",
+    "napi",
+    "highlight",
+    "hooks",
     "native",
-    "addon"
+    "mouse",
+    "keyboard",
+    "clipboard",
+    "uiautomation"
   ],
   "license": "MIT",
   "dependencies": {

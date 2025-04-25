@@ -17,7 +17,8 @@
           "sources": [ 
             "src/windows/selection_hook.cc",
             "src/windows/lib/string_pool.cc",
-            "src/windows/lib/utils.cc"
+            "src/windows/lib/utils.cc",
+            "src/windows/lib/clipboard.cc"
           ],
           "libraries": [ 
             "uiautomationcore.lib",

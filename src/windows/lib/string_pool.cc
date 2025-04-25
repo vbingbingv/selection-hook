@@ -1,3 +1,10 @@
+/**
+ * String pool for text selection hook
+ *
+ * Copyright (c) 2025 0xfullex (https://github.com/0xfullex/selection-hook)
+ * Licensed under the MIT License
+ */
+
 #include "string_pool.h"
 #include <windows.h>
 #include <algorithm>

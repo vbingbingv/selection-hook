@@ -249,6 +249,19 @@ declare class SelectionHook extends EventEmitter {
   setSelectionPassiveMode(passive: boolean): boolean;
 
   /**
+   * Write text to clipboard
+   * @param {string} text - Text to write to clipboard
+   * @returns {boolean} Success status
+   */
+  writeToClipboard(text: string): boolean;
+
+  /**
+   * Read text from clipboard
+   * @returns {string|null} Text from clipboard or null if empty or error
+   */
+  readFromClipboard(): string | null;
+
+  /**
    * Release resources
    *
    * Stops monitoring and releases all native resources.
