@@ -88,27 +88,31 @@ class SelectionHook extends EventEmitter {
 
     try {
       const callback = (data) => {
-        if (!data) return;
+        try {
+          if (!data || !data.type) return;
 
-        switch (data.type) {
-          case "text-selection":
-            const formattedData = this._formatSelectionData(data);
-            if (formattedData) {
-              this.emit("text-selection", formattedData);
-            }
-            break;
-          case "mouse-event":
-            this.emit(data.action, data);
-            break;
-          case "keyboard-event":
-            this.emit(data.action, data);
-            break;
-          case "status":
-            this.emit("status", data.status);
-            break;
-          case "error":
-            this.emit("error", new Error(data.error));
-            break;
+          switch (data.type) {
+            case "text-selection":
+              const formattedData = this._formatSelectionData(data);
+              if (formattedData) {
+                this.emit("text-selection", formattedData);
+              }
+              break;
+            case "mouse-event":
+              this.emit(data.action, data);
+              break;
+            case "keyboard-event":
+              this.emit(data.action, data);
+              break;
+            case "status":
+              this.emit("status", data.status);
+              break;
+            case "error":
+              this.emit("error", new Error(data.error));
+              break;
+          }
+        } catch (err) {
+          this._handleError("Failed to process event data", err);
         }
       };
 
@@ -421,6 +425,9 @@ class SelectionHook extends EventEmitter {
 
     const errorMsg = `${message}: ${err.message}`;
     console.error(errorMsg);
+    if (err.stack) {
+      console.error(err.stack);
+    }
     this.emit("error", new Error(errorMsg));
   }
 
