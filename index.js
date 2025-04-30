@@ -26,6 +26,9 @@ try {
 }
 
 class SelectionHook extends EventEmitter {
+  #instance = null;
+  #running = false;
+
   static SelectionMethod = {
     NONE: 0,
     UIA: 1,
@@ -49,13 +52,10 @@ class SelectionHook extends EventEmitter {
   };
 
   constructor() {
-    super();
-    this._instance = null;
-    this._running = false;
-
     if (!nativeModule) {
       throw new Error("Native module failed to load - only works on Windows");
     }
+    super();
   }
 
   /**
@@ -64,36 +64,36 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   start(config = null) {
-    const defaultConfig = this._getDefaultConfig();
+    const defaultConfig = this.#getDefaultConfig();
 
     _debugFlag = config?.debug ?? defaultConfig.debug;
 
-    if (this._running) {
-      this._logDebug("Text selection hook already running");
+    if (this.#running) {
+      this.#logDebug("Text selection hook already running");
       return true;
     }
 
-    if (!this._instance) {
+    if (!this.#instance) {
       try {
-        this._instance = new nativeModule.TextSelectionHook();
+        this.#instance = new nativeModule.TextSelectionHook();
       } catch (err) {
-        this._handleError("Failed to create hook instance", err);
+        this.#handleError("Failed to create hook instance", err);
         return false;
       }
     }
 
     if (config) {
-      this._initByConfig(defaultConfig, config);
+      this.#initByConfig(defaultConfig, config);
     }
 
     try {
       const callback = (data) => {
         try {
-          if (!data || !data.type) return;
+          if (!data || !data.type || !this.#running) return;
 
           switch (data.type) {
             case "text-selection":
-              const formattedData = this._formatSelectionData(data);
+              const formattedData = this.#formatSelectionData(data);
               if (formattedData) {
                 this.emit("text-selection", formattedData);
               }
@@ -112,38 +112,38 @@ class SelectionHook extends EventEmitter {
               break;
           }
         } catch (err) {
-          this._handleError("Failed to process event data", err);
+          this.#handleError("Failed to process event data", err);
         }
       };
 
-      this._instance.start(callback);
-      this._running = true;
+      this.#instance.start(callback);
+      this.#running = true;
       this.emit("status", "started");
       return true;
     } catch (err) {
-      this._handleError("Failed to start hook", err);
+      this.#handleError("Failed to start hook", err);
       return false;
     }
   }
 
   /**
-   * Stop monitoring text selections
+   * Stop monitoring text selections, can start again using start()
    * @returns {boolean} Success status
    */
   stop() {
-    if (!this._instance || !this._running) {
-      this._logDebug("Text selection hook not running");
+    if (!this.#instance || !this.#running) {
+      this.#logDebug("Text selection hook not running");
       return true;
     }
 
     try {
-      this._instance.stop();
-      this._running = false;
+      this.#instance.stop();
+      this.#running = false;
       this.emit("status", "stopped");
       return true;
     } catch (err) {
-      this._handleError("Failed to stop hook", err);
-      this._running = false;
+      this.#handleError("Failed to stop hook", err);
+      this.#running = false;
       return false;
     }
   }
@@ -153,16 +153,16 @@ class SelectionHook extends EventEmitter {
    * @returns {object|null} Selection data or null
    */
   getCurrentSelection() {
-    if (!this._instance || !this._running) {
-      this._logDebug("Text selection hook not running");
+    if (!this.#instance || !this.#running) {
+      this.#logDebug("Text selection hook not running");
       return null;
     }
 
     try {
-      const data = this._instance.getCurrentSelection();
-      return this._formatSelectionData(data);
+      const data = this.#instance.getCurrentSelection();
+      return this.#formatSelectionData(data);
     } catch (err) {
-      this._handleError("Failed to get current selection", err);
+      this.#handleError("Failed to get current selection", err);
       return null;
     }
   }
@@ -172,13 +172,13 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   enableMouseMoveEvent() {
-    if (!this._checkRunning()) return false;
+    if (!this.#checkRunning()) return false;
 
     try {
-      this._instance.enableMouseMoveEvent();
+      this.#instance.enableMouseMoveEvent();
       return true;
     } catch (err) {
-      this._handleError("Failed to enable mouse move events", err);
+      this.#handleError("Failed to enable mouse move events", err);
       return false;
     }
   }
@@ -188,13 +188,13 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   disableMouseMoveEvent() {
-    if (!this._checkRunning()) return false;
+    if (!this.#checkRunning()) return false;
 
     try {
-      this._instance.disableMouseMoveEvent();
+      this.#instance.disableMouseMoveEvent();
       return true;
     } catch (err) {
-      this._handleError("Failed to disable mouse move events", err);
+      this.#handleError("Failed to disable mouse move events", err);
       return false;
     }
   }
@@ -205,13 +205,13 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   enableClipboard() {
-    if (!this._checkRunning()) return false;
+    if (!this.#checkRunning()) return false;
 
     try {
-      this._instance.enableClipboard();
+      this.#instance.enableClipboard();
       return true;
     } catch (err) {
-      this._handleError("Failed to enable clipboard fallback", err);
+      this.#handleError("Failed to enable clipboard fallback", err);
       return false;
     }
   }
@@ -222,13 +222,13 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   disableClipboard() {
-    if (!this._checkRunning()) return false;
+    if (!this.#checkRunning()) return false;
 
     try {
-      this._instance.disableClipboard();
+      this.#instance.disableClipboard();
       return true;
     } catch (err) {
-      this._handleError("Failed to disable clipboard fallback", err);
+      this.#handleError("Failed to disable clipboard fallback", err);
       return false;
     }
   }
@@ -247,24 +247,24 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   setClipboardMode(mode, programList = []) {
-    if (!this._checkRunning()) return false;
+    if (!this.#checkRunning()) return false;
 
     const validModes = Object.values(SelectionHook.ClipboardMode);
     if (!validModes.includes(mode)) {
-      this._handleError("Invalid clipboard mode", new Error("Invalid argument"));
+      this.#handleError("Invalid clipboard mode", new Error("Invalid argument"));
       return false;
     }
 
     if (!Array.isArray(programList)) {
-      this._handleError("Program list must be an array", new Error("Invalid argument"));
+      this.#handleError("Program list must be an array", new Error("Invalid argument"));
       return false;
     }
 
     try {
-      this._instance.setClipboardMode(mode, programList);
+      this.#instance.setClipboardMode(mode, programList);
       return true;
     } catch (err) {
-      this._handleError("Failed to set clipboard mode and list", err);
+      this.#handleError("Failed to set clipboard mode and list", err);
       return false;
     }
   }
@@ -275,13 +275,13 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   setSelectionPassiveMode(passive) {
-    if (!this._checkRunning()) return false;
+    if (!this.#checkRunning()) return false;
 
     try {
-      this._instance.setSelectionPassiveMode(passive);
+      this.#instance.setSelectionPassiveMode(passive);
       return true;
     } catch (err) {
-      this._handleError("Failed to set selection passive mode", err);
+      this.#handleError("Failed to set selection passive mode", err);
       return false;
     }
   }
@@ -292,20 +292,20 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   writeToClipboard(text) {
-    if (!this._instance || !this._running) {
-      this._logDebug("Text selection hook not running");
+    if (!this.#instance || !this.#running) {
+      this.#logDebug("Text selection hook not running");
       return false;
     }
 
     if (typeof text !== "string") {
-      this._handleError("Text must be a string", new Error("Invalid argument"));
+      this.#handleError("Text must be a string", new Error("Invalid argument"));
       return false;
     }
 
     try {
-      return this._instance.writeToClipboard(text);
+      return this.#instance.writeToClipboard(text);
     } catch (err) {
-      this._handleError("Failed to write text to clipboard", err);
+      this.#handleError("Failed to write text to clipboard", err);
       return false;
     }
   }
@@ -315,15 +315,15 @@ class SelectionHook extends EventEmitter {
    * @returns {string|null} Text from clipboard or null if empty or error
    */
   readFromClipboard() {
-    if (!this._instance || !this._running) {
-      this._logDebug("Text selection hook not running");
+    if (!this.#instance || !this.#running) {
+      this.#logDebug("Text selection hook not running");
       return null;
     }
 
     try {
-      return this._instance.readFromClipboard();
+      return this.#instance.readFromClipboard();
     } catch (err) {
-      this._handleError("Failed to read text from clipboard", err);
+      this.#handleError("Failed to read text from clipboard", err);
       return null;
     }
   }
@@ -333,7 +333,7 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Running status
    */
   isRunning() {
-    return this._running;
+    return this.#running;
   }
 
   /**
@@ -341,10 +341,11 @@ class SelectionHook extends EventEmitter {
    */
   cleanup() {
     this.stop();
-    this._instance = null;
+    this.removeAllListeners();
+    this.#instance = null;
   }
 
-  _getDefaultConfig() {
+  #getDefaultConfig() {
     return {
       debug: false,
       enableMouseMoveEvent: false,
@@ -355,7 +356,7 @@ class SelectionHook extends EventEmitter {
     };
   }
 
-  _initByConfig(defaultConfig, userConfig) {
+  #initByConfig(defaultConfig, userConfig) {
     const config = {};
 
     // Only keep values that exist in userConfig and differ from defaultConfig
@@ -368,33 +369,33 @@ class SelectionHook extends EventEmitter {
     // Apply the filtered config
     if (config.enableMouseMoveEvent !== undefined) {
       if (config.enableMouseMoveEvent) {
-        this._instance.enableMouseMoveEvent();
+        this.#instance.enableMouseMoveEvent();
       } else {
-        this._instance.disableMouseMoveEvent();
+        this.#instance.disableMouseMoveEvent();
       }
     }
 
     if (config.enableClipboard !== undefined) {
       if (config.enableClipboard) {
-        this._instance.enableClipboard();
+        this.#instance.enableClipboard();
       } else {
-        this._instance.disableClipboard();
+        this.#instance.disableClipboard();
       }
     }
 
     if (config.selectionPassiveMode !== undefined) {
-      this._instance.setSelectionPassiveMode(config.selectionPassiveMode);
+      this.#instance.setSelectionPassiveMode(config.selectionPassiveMode);
     }
 
     if (config.clipboardMode !== undefined || config.programList !== undefined) {
-      this._instance.setClipboardMode(
+      this.#instance.setClipboardMode(
         config.clipboardMode ?? defaultConfig.clipboardMode,
         config.programList ?? defaultConfig.programList
       );
     }
   }
 
-  _formatSelectionData(data) {
+  #formatSelectionData(data) {
     if (!data) return null;
 
     return {
@@ -412,28 +413,30 @@ class SelectionHook extends EventEmitter {
   }
 
   // Private helper methods
-  _checkRunning() {
-    if (!this._instance || !this._running) {
-      this._logDebug("Text selection hook not running");
+  #checkRunning() {
+    if (!this.#instance || !this.#running) {
+      this.#logDebug("Text selection hook not running");
       return false;
     }
     return true;
   }
 
-  _handleError(message, err) {
+  #handleError(message, err) {
     if (!_debugFlag) return;
 
     const errorMsg = `${message}: ${err.message}`;
-    console.error(errorMsg);
+    console.error("[SelectionHook] ", errorMsg);
+
     if (err.stack) {
       console.error(err.stack);
     }
+
     this.emit("error", new Error(errorMsg));
   }
 
-  _logDebug(message) {
+  #logDebug(message) {
     if (_debugFlag) {
-      console.warn(message);
+      console.warn("[SelectionHook] ", message);
     }
   }
 }
