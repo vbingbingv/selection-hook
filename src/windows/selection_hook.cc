@@ -574,6 +574,12 @@ Napi::Value SelectionHook::GetCurrentSelection(const Napi::CallbackInfo &info)
         }
 
         is_triggered_by_user = false;
+
+        // Convert coordinates to logical coordinates
+        double scaleFactor = GetWindowScaleFactor(hwnd);
+
+        ConvertSelectionInfoToLogicalCoordinates(scaleFactor, selectionInfo);
+
         return CreateSelectionResultObject(env, selectionInfo);
     }
     catch (const std::exception &e)
