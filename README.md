@@ -210,6 +210,7 @@ Error events
 
 ### Data Structure
 
+**Note**: All coordinates are in logical coordinates (adjusted for DPI scaling).
 
 #### `TextSelectionData`
 Represents text selection information including content, source application, and coordinates.

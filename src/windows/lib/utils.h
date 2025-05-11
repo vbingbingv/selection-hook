@@ -26,3 +26,8 @@ bool HasWindowMoved(const RECT &currentWindowRect, const RECT &lastWindowRect);
  * Get program name (executable path) from a window handle
  */
 bool GetProgramNameFromHwnd(HWND hwnd, std::wstring &programName);
+
+/**
+ * Get the DPI scale factor for a window
+ */
+double GetWindowScaleFactor(HWND hwnd);
