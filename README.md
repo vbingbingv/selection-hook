@@ -37,7 +37,7 @@ Currently only supports Windows. macOS/Linux support is coming soon.
 npm install selection-hook
 ```
 
-The npm package ships with a pre-built `.node` file — no rebuilding needed. For Electron rebuild issues, add these values to your `electron-builder` config to avoid rebuilding:
+The npm package ships with a pre-built `.node` file — no rebuilding needed. For Electron rebuild issues, add these values to your `electron-forge` config to avoid rebuilding:
 
 ```javascript
 rebuildConfig: {
