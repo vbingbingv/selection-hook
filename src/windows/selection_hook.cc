@@ -263,9 +263,6 @@ private:
     static LRESULT CALLBACK KeyboardHookCallback(int nCode, WPARAM wParam, LPARAM lParam);
     static void ProcessMouseEvent(Napi::Env env, Napi::Function function, MouseEventContext *mouseEvent);
     static void ProcessKeyboardEvent(Napi::Env env, Napi::Function function, KeyboardEventContext *keyboardEvent);
-
-    // Internal utility methods
-    void ConvertSelectionInfoToLogicalCoordinates(double scaleFactor, TextSelectionInfo &selectionInfo);
 };
 
 // Static member initialization
@@ -574,11 +571,6 @@ Napi::Value SelectionHook::GetCurrentSelection(const Napi::CallbackInfo &info)
         }
 
         is_triggered_by_user = false;
-
-        // Convert coordinates to logical coordinates
-        double scaleFactor = GetWindowScaleFactor(hwnd);
-
-        ConvertSelectionInfoToLogicalCoordinates(scaleFactor, selectionInfo);
 
         return CreateSelectionResultObject(env, selectionInfo);
     }
@@ -957,11 +949,6 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
                         selectionInfo.posLevel = SelectionPositionLevel::MouseSingle;
                 }
 
-                // Convert coordinates to logical coordinates
-                double scaleFactor = GetWindowScaleFactor(hwnd);
-
-                currentInstance->ConvertSelectionInfoToLogicalCoordinates(scaleFactor, selectionInfo);
-
                 auto callback = [selectionInfo](Napi::Env env, Napi::Function jsCallback)
                 {
                     Napi::Object resultObj = currentInstance->CreateSelectionResultObject(env, selectionInfo);
@@ -976,15 +963,11 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
     // Create and emit mouse event object
     if (mouseType[0] != '\0')
     {
-        // Get the window under mouse and its scale factor
-        HWND hwnd = GetForegroundWindow();
-        double scaleFactor = GetWindowScaleFactor(hwnd);
-
         Napi::Object resultObj = Napi::Object::New(env);
         resultObj.Set(Napi::String::New(env, "type"), Napi::String::New(env, "mouse-event"));
         resultObj.Set(Napi::String::New(env, "action"), Napi::String::New(env, mouseType));
-        resultObj.Set(Napi::String::New(env, "x"), Napi::Number::New(env, static_cast<LONG>(round(currentPos.x / scaleFactor))));
-        resultObj.Set(Napi::String::New(env, "y"), Napi::Number::New(env, static_cast<LONG>(round(currentPos.y / scaleFactor))));
+        resultObj.Set(Napi::String::New(env, "x"), Napi::Number::New(env, currentPos.x));
+        resultObj.Set(Napi::String::New(env, "y"), Napi::Number::New(env, currentPos.y));
         resultObj.Set(Napi::String::New(env, "button"), Napi::Number::New(env, static_cast<int>(mouseButton)));
         resultObj.Set(Napi::String::New(env, "flag"), Napi::Number::New(env, mouseFlag));
         function.Call({resultObj});
@@ -1935,36 +1918,6 @@ bool SelectionHook::SetTextRangeCoordinates(IUIAutomationTextRange *pRange, Text
     }
 
     return false;
-}
-
-/**
- * Convert all coordinates in TextSelectionInfo from physical to logical coordinates
- * Round to 1 decimal place
- */
-void SelectionHook::ConvertSelectionInfoToLogicalCoordinates(double scaleFactor, TextSelectionInfo &selectionInfo)
-{
-    auto roundToLong = [](double value) -> LONG
-    {
-        return static_cast<LONG>(round(value));
-    };
-
-    // Convert start coordinates
-    selectionInfo.startTop.x = roundToLong(selectionInfo.startTop.x / scaleFactor);
-    selectionInfo.startTop.y = roundToLong(selectionInfo.startTop.y / scaleFactor);
-    selectionInfo.startBottom.x = roundToLong(selectionInfo.startBottom.x / scaleFactor);
-    selectionInfo.startBottom.y = roundToLong(selectionInfo.startBottom.y / scaleFactor);
-
-    // Convert end coordinates
-    selectionInfo.endTop.x = roundToLong(selectionInfo.endTop.x / scaleFactor);
-    selectionInfo.endTop.y = roundToLong(selectionInfo.endTop.y / scaleFactor);
-    selectionInfo.endBottom.x = roundToLong(selectionInfo.endBottom.x / scaleFactor);
-    selectionInfo.endBottom.y = roundToLong(selectionInfo.endBottom.y / scaleFactor);
-
-    // Convert mouse coordinates
-    selectionInfo.mousePosStart.x = roundToLong(selectionInfo.mousePosStart.x / scaleFactor);
-    selectionInfo.mousePosStart.y = roundToLong(selectionInfo.mousePosStart.y / scaleFactor);
-    selectionInfo.mousePosEnd.x = roundToLong(selectionInfo.mousePosEnd.x / scaleFactor);
-    selectionInfo.mousePosEnd.y = roundToLong(selectionInfo.mousePosEnd.y / scaleFactor);
 }
 
 /**

@@ -93,27 +93,3 @@ bool GetProgramNameFromHwnd(HWND hwnd, std::wstring &programName)
 
     return true;
 }
-
-/**
- * Get the DPI scale factor for a window
- */
-double GetWindowScaleFactor(HWND hwnd)
-{
-    if (!IsWindow(hwnd))
-    {
-        return 1.0; // Return default scale for invalid window
-    }
-
-    // Get DPI for the window
-    UINT dpi = GetDpiForWindow(hwnd);
-    if (dpi == 0)
-    {
-        // Fallback to system DPI if GetDpiForWindow fails
-        HDC hdc = GetDC(NULL);
-        dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-        ReleaseDC(NULL, hdc);
-    }
-
-    // Calculate scale factor (96 DPI = 1.0 scale)
-    return static_cast<double>(dpi) / 96.0;
-}

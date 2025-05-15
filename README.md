@@ -210,7 +210,7 @@ Error events
 
 ### Data Structure
 
-**Note**: All coordinates are in logical coordinates (adjusted for DPI scaling).
+**Note**: All coordinates are in physical coordinates (virtual screen coordinates) in Windows. You can use `screen.screenToDipPoint(point)` in Electron to convert the point to logical coordinates.
 
 #### `TextSelectionData`
 Represents text selection information including content, source application, and coordinates.
