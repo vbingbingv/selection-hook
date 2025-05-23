@@ -1783,7 +1783,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     // Simulate Ctrl+C to copy selected text
     INPUT inputs[4] = {};
     inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[0].ki.wVk = VK_RCONTROL;
     inputs[0].ki.dwFlags = 0; // Press down
     inputs[1].type = INPUT_KEYBOARD;
     inputs[1].ki.wVk = 'C';
@@ -1792,7 +1792,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     inputs[2].ki.wVk = 'C';
     inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
     inputs[3].type = INPUT_KEYBOARD;
-    inputs[3].ki.wVk = VK_CONTROL;
+    inputs[3].ki.wVk = VK_RCONTROL;
     inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(4, inputs, sizeof(INPUT));
 
