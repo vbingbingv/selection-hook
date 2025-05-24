@@ -36,7 +36,7 @@ jobs:
       - name: Upload Windows x64 binaries
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: ./build/release-assets/selection-hook-win32-x64.node
@@ -45,7 +45,7 @@ jobs:
       - name: Upload Windows arm64 binaries
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: ./build/release-assets/selection-hook-win32-arm64.node
