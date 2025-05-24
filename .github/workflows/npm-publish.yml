@@ -33,24 +33,15 @@ jobs:
             exit 1
           }
       # Upload release assets
-      - name: Upload Windows x64 binaries
-        uses: actions/upload-release-asset@v1
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            build/release-assets/selection-hook-win32-x64.node
+            build/release-assets/selection-hook-win32-arm64.node
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./build/release-assets/selection-hook-win32-x64.node
-          asset_name: selection-hook-win32-x64.node
-          asset_content_type: application/octet-stream
-      - name: Upload Windows arm64 binaries
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./build/release-assets/selection-hook-win32-arm64.node
-          asset_name: selection-hook-win32-arm64.node
-          asset_content_type: application/octet-stream
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_PUBLISH_TOKEN}}
