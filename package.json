@@ -11,8 +11,11 @@
   "types": "index.d.ts",
   "scripts": {
     "install": "node-gyp-build",
-    "build": "node-gyp rebuild",
-    "prebuild": "prebuildify --napi",
+    "build": "node-gyp build",
+    "prebuild": "npm run prebuild:win32",
+    "prebuild:win32": "npm run prebuild:win32:x64 && npm run prebuild:win32:arm64",
+    "prebuild:win32:x64": "prebuildify --napi --platform=win32 --arch=x64",
+    "prebuild:win32:arm64": "prebuildify --napi --platform=win32 --arch=arm64",
     "demo": "node --trace-deprecation --force-node-api-uncaught-exceptions-policy=true examples/node-demo.js"
   },
   "keywords": [

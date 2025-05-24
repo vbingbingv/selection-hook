@@ -14,10 +14,43 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org/
       - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
       - run: npm ci
       - run: npm run prebuild
+      # Prepare release assets
+      - name: Prepare release assets
+        run: |
+          New-Item -ItemType Directory -Path "build/release-assets" -Force
+          if (Test-Path "prebuilds/win32-x64/selection-hook.node") {
+            Copy-Item -Path "prebuilds/win32-x64/selection-hook.node" -Destination "build/release-assets/selection-hook-win32-x64.node"
+          } else {
+            Write-Error "x64 binary not found!"
+            exit 1
+          }
+          if (Test-Path "prebuilds/win32-arm64/selection-hook.node") {
+            Copy-Item -Path "prebuilds/win32-arm64/selection-hook.node" -Destination "build/release-assets/selection-hook-win32-arm64.node"
+          } else {
+            Write-Error "arm64 binary not found!"
+            exit 1
+          }
+      # Upload release assets
+      - name: Upload Windows x64 binaries
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./build/release-assets/selection-hook-win32-x64.node
+          asset_name: selection-hook-win32-x64.node
+          asset_content_type: application/octet-stream
+      - name: Upload Windows arm64 binaries
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./build/release-assets/selection-hook-win32-arm64.node
+          asset_name: selection-hook-win32-arm64.node
+          asset_content_type: application/octet-stream
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_PUBLISH_TOKEN}}
