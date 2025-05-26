@@ -29,18 +29,13 @@
 
 #include <napi.h>
 #include <windows.h>
-#include <psapi.h>
 #include <oleacc.h>
 #include <UIAutomation.h>
 #include <ShellScalingApi.h>
 
 #include <atomic>
-#include <cmath>
-#include <condition_variable>
-#include <mutex>
 #include <string>
 #include <thread>
-#include <unordered_map>
 
 #include "lib/string_pool.h"
 #include "lib/utils.h"
