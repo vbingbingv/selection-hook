@@ -228,25 +228,22 @@ private:
     // the cursor of mouse down and mouse up, for clipboard detection
     HCURSOR mouse_up_cursor = NULL;
 
-    // Store clipboard sequence number when mouse down
-    DWORD clipboard_sequence = 0;
-
     // the control type of the UI Automation focused element
     CONTROLTYPEID uia_control_type = UIA_WindowControlTypeId;
 
     // passive mode: only trigger when user call GetSelectionText
     bool is_selection_passive_mode = false;
-
     bool is_enabled_clipboard = true; // Enable by default
+    // Store clipboard sequence number when mouse down
+    DWORD clipboard_sequence = 0;
+
+    // clipboard filter mode
     FilterMode clipboard_filter_mode = FilterMode::Default;
-    // Clipboard list - using UTF8 strings to avoid linter issues
     std::vector<std::string> clipboard_filter_list;
 
     // global filter mode
     FilterMode global_filter_mode = FilterMode::Default;
     std::vector<std::string> global_filter_list;
-
-    bool IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList);
 
     // the text selection is processing, we should ignore some events
     std::atomic<bool> is_processing{false};
@@ -259,6 +256,7 @@ private:
     bool GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionInfo);
     bool ShouldProcessViaClipboard(HWND hwnd, std::wstring &programName);
     bool SetTextRangeCoordinates(IUIAutomationTextRange *pRange, TextSelectionInfo &selectionInfo);
+    bool IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList);
     Napi::Object CreateSelectionResultObject(Napi::Env env, const TextSelectionInfo &selectionInfo);
 
     // Mouse and keyboard event handling methods
@@ -1781,6 +1779,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     bool isXPressed = false;
     bool isVPressed = false;
     bool isCtrlPressing = false;
+    bool isShiftPressing = false;
     bool isCPressing = false;
     bool isXPressing = false;
     bool isVPressing = false;
@@ -1801,11 +1800,13 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         }
 
         isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        isShiftPressing = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
         isCPressing = (GetAsyncKeyState('C') & 0x8000) != 0;
         isXPressing = (GetAsyncKeyState('X') & 0x8000) != 0;
         isVPressing = (GetAsyncKeyState('V') & 0x8000) != 0;
 
-        if (!isCtrlPressing && !isCPressing && !isXPressing && !isVPressing)
+        if (!isCtrlPressing && !isShiftPressing && !isCPressing && !isXPressing && !isVPressing)
         {
             break;
         }
@@ -1838,6 +1839,13 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
 
     // if it's a user copy behavior, we will do nothing
     if (isCtrlPressed && (isCPressed || isXPressed || isVPressed))
+    {
+        return false;
+    }
+
+    // if shift is still pressing, we will not process
+    // because ctrl+shift+c is a common shortcut for other purposes
+    if (isShiftPressing)
     {
         return false;
     }
