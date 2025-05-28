@@ -475,7 +475,12 @@ function showSelection(selectionData) {
 
   console.log(colors.info, "=== Detected selected text ===");
 
-  console.log(selectionData.text);
+  console.log(
+    colors.info,
+    `Text Length: ${selectionData.text.length}\nText Content: ${selectionData.text
+      .replace(/\r\n/g, "\n")
+      .replace(/\r(?!\n)/g, "\n")}`
+  );
 
   // Selection method and position level maps
   const methodMap = {

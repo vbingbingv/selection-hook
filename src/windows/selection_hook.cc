@@ -867,6 +867,18 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
                 }
             }
 
+            // Check if shift key is pressed when mouse up, it's a way to select text
+            if (!shouldDetectSelection)
+            {
+                bool isShiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                bool isCtrlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+                bool isAltPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+                if (isShiftPressed && !isCtrlPressed && !isAltPressed)
+                {
+                    shouldDetectSelection = true;
+                }
+            }
+
             if (shouldDetectSelection && currentInstance->is_enabled_clipboard)
             {
                 CURSORINFO ci = {sizeof(CURSORINFO)};
