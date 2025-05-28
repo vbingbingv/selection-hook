@@ -108,7 +108,7 @@ enum class MouseButton
     WheelHorizontal = 1
 };
 
-enum class ClipboardMode
+enum class FilterMode
 {
     Default = 0,     // trigger anyway
     IncludeList = 1, // only trigger when the program name is in the include list
@@ -201,6 +201,7 @@ private:
     void EnableClipboard(const Napi::CallbackInfo &info);
     void DisableClipboard(const Napi::CallbackInfo &info);
     void SetClipboardMode(const Napi::CallbackInfo &info);
+    void SetGlobalFilterMode(const Napi::CallbackInfo &info);
     void SetSelectionPassiveMode(const Napi::CallbackInfo &info);
     Napi::Value GetCurrentSelection(const Napi::CallbackInfo &info);
     Napi::Value WriteToClipboard(const Napi::CallbackInfo &info);
@@ -237,10 +238,15 @@ private:
     bool is_selection_passive_mode = false;
 
     bool is_enabled_clipboard = true; // Enable by default
-    ClipboardMode clipboard_mode = ClipboardMode::Default;
+    FilterMode clipboard_filter_mode = FilterMode::Default;
     // Clipboard list - using UTF8 strings to avoid linter issues
-    std::vector<std::string> clipboard_program_list;
-    bool IsInClipboardProgramList(const std::wstring &program_name);
+    std::vector<std::string> clipboard_filter_list;
+
+    // global filter mode
+    FilterMode global_filter_mode = FilterMode::Default;
+    std::vector<std::string> global_filter_list;
+
+    bool IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList);
 
     // the text selection is processing, we should ignore some events
     std::atomic<bool> is_processing{false};
@@ -394,7 +400,7 @@ Napi::Object SelectionHook::Init(Napi::Env env, Napi::Object exports)
     Napi::HandleScope scope(env);
 
     // Define class with JavaScript-accessible methods
-    Napi::Function func = DefineClass(env, "TextSelectionHook", {InstanceMethod("start", &SelectionHook::Start), InstanceMethod("stop", &SelectionHook::Stop), InstanceMethod("enableMouseMoveEvent", &SelectionHook::EnableMouseMoveEvent), InstanceMethod("disableMouseMoveEvent", &SelectionHook::DisableMouseMoveEvent), InstanceMethod("enableClipboard", &SelectionHook::EnableClipboard), InstanceMethod("disableClipboard", &SelectionHook::DisableClipboard), InstanceMethod("setClipboardMode", &SelectionHook::SetClipboardMode), InstanceMethod("setSelectionPassiveMode", &SelectionHook::SetSelectionPassiveMode), InstanceMethod("getCurrentSelection", &SelectionHook::GetCurrentSelection), InstanceMethod("writeToClipboard", &SelectionHook::WriteToClipboard), InstanceMethod("readFromClipboard", &SelectionHook::ReadFromClipboard)});
+    Napi::Function func = DefineClass(env, "TextSelectionHook", {InstanceMethod("start", &SelectionHook::Start), InstanceMethod("stop", &SelectionHook::Stop), InstanceMethod("enableMouseMoveEvent", &SelectionHook::EnableMouseMoveEvent), InstanceMethod("disableMouseMoveEvent", &SelectionHook::DisableMouseMoveEvent), InstanceMethod("enableClipboard", &SelectionHook::EnableClipboard), InstanceMethod("disableClipboard", &SelectionHook::DisableClipboard), InstanceMethod("setClipboardMode", &SelectionHook::SetClipboardMode), InstanceMethod("setGlobalFilterMode", &SelectionHook::SetGlobalFilterMode), InstanceMethod("setSelectionPassiveMode", &SelectionHook::SetSelectionPassiveMode), InstanceMethod("getCurrentSelection", &SelectionHook::GetCurrentSelection), InstanceMethod("writeToClipboard", &SelectionHook::WriteToClipboard), InstanceMethod("readFromClipboard", &SelectionHook::ReadFromClipboard)});
 
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
@@ -613,7 +619,7 @@ void SelectionHook::DisableClipboard(const Napi::CallbackInfo &info)
 }
 
 /**
- * NAPI: Set the clipboard include list
+ * NAPI: Set the clipboard filter mode & list
  */
 void SelectionHook::SetClipboardMode(const Napi::CallbackInfo &info)
 {
@@ -627,13 +633,13 @@ void SelectionHook::SetClipboardMode(const Napi::CallbackInfo &info)
 
     // Get clipboard mode from first argument
     int mode = info[0u].As<Napi::Number>().Int32Value();
-    clipboard_mode = static_cast<ClipboardMode>(mode);
+    clipboard_filter_mode = static_cast<FilterMode>(mode);
 
     Napi::Array includeArray = info[1u].As<Napi::Array>();
     uint32_t length = includeArray.Length();
 
     // Clear existing list
-    clipboard_program_list.clear();
+    clipboard_filter_list.clear();
 
     // Process each string in the array
     for (uint32_t i = 0; i < length; i++)
@@ -650,7 +656,50 @@ void SelectionHook::SetClipboardMode(const Napi::CallbackInfo &info)
                            { return std::tolower(c); });
 
             // Add to the include list (store as UTF-8)
-            clipboard_program_list.push_back(programName);
+            clipboard_filter_list.push_back(programName);
+        }
+    }
+}
+
+/**
+ * NAPI: Set the global filter mode & list
+ */
+void SelectionHook::SetGlobalFilterMode(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    // Validate arguments
+    if (info.Length() < 2 || !info[0u].IsNumber() || !info[1u].IsArray())
+    {
+        Napi::TypeError::New(env, "Number and Array expected as arguments").ThrowAsJavaScriptException();
+        return;
+    }
+
+    // Get clipboard mode from first argument
+    int mode = info[0u].As<Napi::Number>().Int32Value();
+    global_filter_mode = static_cast<FilterMode>(mode);
+
+    Napi::Array includeArray = info[1u].As<Napi::Array>();
+    uint32_t length = includeArray.Length();
+
+    // Clear existing list
+    global_filter_list.clear();
+
+    // Process each string in the array
+    for (uint32_t i = 0; i < length; i++)
+    {
+        Napi::Value value = includeArray.Get(i);
+        if (value.IsString())
+        {
+            // Get the UTF-8 string
+            std::string programName = value.As<Napi::String>().Utf8Value();
+
+            // Convert to lowercase
+            std::transform(programName.begin(), programName.end(), programName.begin(),
+                           [](unsigned char c)
+                           { return std::tolower(c); });
+
+            // Add to the include list (store as UTF-8)
+            global_filter_list.push_back(programName);
         }
     }
 }
@@ -732,28 +781,31 @@ Napi::Value SelectionHook::ReadFromClipboard(const Napi::CallbackInfo &info)
 }
 
 /**
- * Check if program name is in the clipboard include list
+ * Check if program name is in the filter list
+ * @param programName The program name to check
+ * @param filterList The list of program names to filter against
+ * @return true if program name matches any item in the filter list
  */
-bool SelectionHook::IsInClipboardProgramList(const std::wstring &program_name)
+bool SelectionHook::IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList)
 {
-    // If include list is not enabled or empty, allow all
-    if (clipboard_program_list.empty())
+    // If filter list is empty, allow all
+    if (filterList.empty())
     {
         return false;
     }
 
     // Convert program name to lowercase UTF-8 for case-insensitive comparison
-    std::wstring lowerProgramName = program_name;
+    std::wstring lowerProgramName = programName;
     std::transform(lowerProgramName.begin(), lowerProgramName.end(),
                    lowerProgramName.begin(), towlower);
 
     // Convert to UTF-8 for comparison with our list
     std::string utf8ProgramName = StringPool::WideToUtf8(lowerProgramName);
 
-    // Check if program name is in the include list
-    for (const auto &includeItem : clipboard_program_list)
+    // Check if program name is in the filter list
+    for (const auto &filterItem : filterList)
     {
-        if (utf8ProgramName.find(includeItem) != std::string::npos)
+        if (utf8ProgramName.find(filterItem) != std::string::npos)
         {
             return true;
         }
@@ -876,6 +928,8 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
                 if (isShiftPressed && !isCtrlPressed && !isAltPressed)
                 {
                     shouldDetectSelection = true;
+                    // shift + click is like DoubleClick because we only have one cursor pos
+                    detectionType = SelectionDetectType::DoubleClick;
                 }
             }
 
@@ -1057,6 +1111,25 @@ bool SelectionHook::GetSelectedText(HWND hwnd, TextSelectionInfo &selectionInfo)
     if (!GetProgramNameFromHwnd(hwnd, selectionInfo.programName))
     {
         selectionInfo.programName = L"";
+
+        // if no programName found, and global filter mode is include list, return false
+        if (global_filter_mode == FilterMode::IncludeList)
+        {
+            is_processing.store(false);
+            return false;
+        }
+    }
+    // should filter by global filter list
+    else if (global_filter_mode != FilterMode::Default)
+    {
+        bool isIn = IsInFilterList(selectionInfo.programName, global_filter_list);
+
+        if ((global_filter_mode == FilterMode::IncludeList && !isIn) ||
+            (global_filter_mode == FilterMode::ExcludeList && isIn))
+        {
+            is_processing.store(false);
+            return false;
+        }
     }
 
     // First try UI Automation (supported by modern applications)
@@ -1104,16 +1177,16 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
         return false;
 
     bool result = false;
-    switch (clipboard_mode)
+    switch (clipboard_filter_mode)
     {
-    case ClipboardMode::Default:
+    case FilterMode::Default:
         result = true;
         break;
-    case ClipboardMode::IncludeList:
-        result = IsInClipboardProgramList(programName);
+    case FilterMode::IncludeList:
+        result = IsInFilterList(programName, clipboard_filter_list);
         break;
-    case ClipboardMode::ExcludeList:
-        result = !IsInClipboardProgramList(programName);
+    case FilterMode::ExcludeList:
+        result = !IsInFilterList(programName, clipboard_filter_list);
         break;
     }
 

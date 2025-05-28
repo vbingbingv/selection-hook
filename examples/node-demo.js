@@ -28,12 +28,13 @@ const config = {
   showMouseEvents: false, // Mouse clicks and wheel events
   showKeyboardEvents: false, // Keyboard key press/release events
   clipboardFallbackEnabled: false, // Use clipboard as fallback for text selection
-  clipboardMode: 0, // Default clipboard mode (see SelectionHook.ClipboardMode)
+  clipboardMode: 0, // Default clipboard mode (see SelectionHook.FilterMode)
+  globalFilterMode: 0, // Default global filter mode (see SelectionHook.FilterMode)
   passiveModeEnabled: false, // Passive mode for text selection
 };
 
-// Program list for clipboard mode
-const programList = ["cursor.exe", "vscode.exe"];
+// Program list for clipboard mode and global filter
+const programList = ["cursor.exe", "vscode.exe", "notepad.exe"];
 
 /**
  * ANSI color codes for console output formatting
@@ -97,6 +98,7 @@ function printWelcomeMessage() {
   console.log("  C - Display current selection");
   console.log("  B - Toggle clipboard fallback (default: OFF)");
   console.log("  L - Toggle clipboard mode (DEFAULT → EXCLUDE_LIST → INCLUDE_LIST)");
+  console.log("  F - Toggle global filter mode (DEFAULT → EXCLUDE_LIST → INCLUDE_LIST)");
   console.log("  P - Toggle passive mode (default: OFF)");
   console.log("  W - Write text 'Test clipboard write from selection-hook' to clipboard");
   console.log("  R - Read text from clipboard");
@@ -336,6 +338,10 @@ function handleKeyPress(key) {
       toggleClipboardMode();
       break;
 
+    case "f": // Toggle global filter mode
+      toggleGlobalFilterMode();
+      break;
+
     case "p": // Toggle passive mode
       togglePassiveMode();
       break;
@@ -430,11 +436,11 @@ function togglePassiveMode() {
  * @param {number} mode - Clipboard mode value
  * @returns {string} Mode name
  */
-function getClipboardModeName(mode) {
+function getFilterModeName(mode) {
   const modeNames = {
-    [SelectionHook.ClipboardMode.DEFAULT]: "DEFAULT",
-    [SelectionHook.ClipboardMode.EXCLUDE_LIST]: "EXCLUDE_LIST",
-    [SelectionHook.ClipboardMode.INCLUDE_LIST]: "INCLUDE_LIST",
+    [SelectionHook.FilterMode.DEFAULT]: "DEFAULT",
+    [SelectionHook.FilterMode.EXCLUDE_LIST]: "EXCLUDE_LIST",
+    [SelectionHook.FilterMode.INCLUDE_LIST]: "INCLUDE_LIST",
   };
   return modeNames[mode] || "UNKNOWN";
 }
@@ -451,12 +457,33 @@ function toggleClipboardMode() {
   if (success) {
     console.log(
       colors.success,
-      `Clipboard mode set to ${getClipboardModeName(config.clipboardMode)} for ${programList.join(
+      `Clipboard mode set to ${getFilterModeName(config.clipboardMode)} for ${programList.join(
         ", "
       )}`
     );
   } else {
     console.log(colors.error, "Failed to set clipboard mode");
+  }
+}
+
+/**
+ * Toggle global filter mode (DEFAULT -> EXCLUDE_LIST -> INCLUDE_LIST -> DEFAULT)
+ */
+function toggleGlobalFilterMode() {
+  // Rotate through the modes
+  config.globalFilterMode = (config.globalFilterMode + 1) % 3;
+
+  // Apply the new mode
+  const success = hook.setGlobalFilterMode(config.globalFilterMode, programList);
+  if (success) {
+    console.log(
+      colors.success,
+      `Global filter mode set to ${getFilterModeName(
+        config.globalFilterMode
+      )} for ${programList.join(", ")}`
+    );
+  } else {
+    console.log(colors.error, "Failed to set global filter mode");
   }
 }
 

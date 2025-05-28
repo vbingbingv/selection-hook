@@ -108,7 +108,7 @@ export interface SelectionConfig {
   /** Enable passive mode where selection requires manual trigger */
   selectionPassiveMode?: boolean;
   /** Mode for clipboard fallback behavior */
-  clipboardMode?: (typeof SelectionHook.ClipboardMode)[keyof typeof SelectionHook.ClipboardMode];
+  clipboardMode?: (typeof SelectionHook.FilterMode)[keyof typeof SelectionHook.FilterMode];
   /** List of program names for clipboard mode filtering */
   programList?: string[];
 }
@@ -136,7 +136,7 @@ declare class SelectionHook extends EventEmitter {
     SEL_DETAILED: 4;
   };
 
-  static ClipboardMode: {
+  static FilterMode: {
     DEFAULT: 0;
     INCLUDE_LIST: 1;
     EXCLUDE_LIST: 2;
@@ -237,7 +237,25 @@ declare class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   setClipboardMode(
-    mode: (typeof SelectionHook.ClipboardMode)[keyof typeof SelectionHook.ClipboardMode],
+    mode: (typeof SelectionHook.FilterMode)[keyof typeof SelectionHook.FilterMode],
+    programList?: string[]
+  ): boolean;
+
+  /**
+   * Set global filter mode for text selection
+   *
+   * Configures how the global filter mechanism works for different programs.
+   * Mode can be:
+   * - DEFAULT: disable global filter
+   * - INCLUDE_LIST: Only use global filter for programs in the list
+   * - EXCLUDE_LIST: Use global filter for all programs except those in the list
+   *
+   * @param {number} mode - Filter mode (SelectionHook.FilterMode)
+   * @param {string[]} programList - Array of program names to include/exclude
+   * @returns {boolean} Success status
+   */
+  setGlobalFilterMode(
+    mode: (typeof SelectionHook.FilterMode)[keyof typeof SelectionHook.FilterMode],
     programList?: string[]
   ): boolean;
 

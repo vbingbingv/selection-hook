@@ -45,7 +45,7 @@ class SelectionHook extends EventEmitter {
     SEL_DETAILED: 4,
   };
 
-  static ClipboardMode = {
+  static FilterMode = {
     DEFAULT: 0,
     INCLUDE_LIST: 1,
     EXCLUDE_LIST: 2,
@@ -249,7 +249,7 @@ class SelectionHook extends EventEmitter {
   setClipboardMode(mode, programList = []) {
     if (!this.#checkRunning()) return false;
 
-    const validModes = Object.values(SelectionHook.ClipboardMode);
+    const validModes = Object.values(SelectionHook.FilterMode);
     if (!validModes.includes(mode)) {
       this.#handleError("Invalid clipboard mode", new Error("Invalid argument"));
       return false;
@@ -265,6 +265,42 @@ class SelectionHook extends EventEmitter {
       return true;
     } catch (err) {
       this.#handleError("Failed to set clipboard mode and list", err);
+      return false;
+    }
+  }
+
+  /**
+   * Set global filter mode for text selection
+   *
+   * Configures how the global filter mechanism works for different programs.
+   * Mode can be:
+   * - DEFAULT: disable global filter
+   * - INCLUDE_LIST: Only use global filter for programs in the list
+   * - EXCLUDE_LIST: Use global filter for all programs except those in the list
+   *
+   * @param {number} mode - Filter mode (SelectionHook.FilterMode)
+   * @param {string[]} programList - Array of program names to include/exclude
+   * @returns {boolean} Success status
+   */
+  setGlobalFilterMode(mode, programList = []) {
+    if (!this.#checkRunning()) return false;
+
+    const validModes = Object.values(SelectionHook.FilterMode);
+    if (!validModes.includes(mode)) {
+      this.#handleError("Invalid filter mode", new Error("Invalid argument"));
+      return false;
+    }
+
+    if (!Array.isArray(programList)) {
+      this.#handleError("Program list must be an array", new Error("Invalid argument"));
+      return false;
+    }
+
+    try {
+      this.#instance.setGlobalFilterMode(mode, programList);
+      return true;
+    } catch (err) {
+      this.#handleError("Failed to set global filter mode and list", err);
       return false;
     }
   }
@@ -351,8 +387,10 @@ class SelectionHook extends EventEmitter {
       enableMouseMoveEvent: false,
       enableClipboard: true,
       selectionPassiveMode: false,
-      clipboardMode: SelectionHook.ClipboardMode.DEFAULT,
-      programList: [],
+      clipboardMode: SelectionHook.FilterMode.DEFAULT,
+      globalFilterMode: SelectionHook.FilterMode.DEFAULT,
+      clipboardFilterList: [],
+      globalFilterList: [],
     };
   }
 
@@ -387,10 +425,17 @@ class SelectionHook extends EventEmitter {
       this.#instance.setSelectionPassiveMode(config.selectionPassiveMode);
     }
 
-    if (config.clipboardMode !== undefined || config.programList !== undefined) {
+    if (config.clipboardMode !== undefined || config.clipboardFilterList !== undefined) {
       this.#instance.setClipboardMode(
         config.clipboardMode ?? defaultConfig.clipboardMode,
-        config.programList ?? defaultConfig.programList
+        config.clipboardFilterList ?? defaultConfig.clipboardFilterList
+      );
+    }
+
+    if (config.globalFilterMode !== undefined || config.globalFilterList !== undefined) {
+      this.#instance.setGlobalFilterMode(
+        config.globalFilterMode ?? defaultConfig.globalFilterMode,
+        config.globalFilterList ?? defaultConfig.globalFilterList
       );
     }
   }

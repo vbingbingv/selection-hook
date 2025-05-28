@@ -114,12 +114,14 @@ Config options (with default values):
   enableMouseMoveEvent?: false,  // Enable mouse move tracking, can be set in runtime
   enableClipboard?: true,        // Enable clipboard fallback, can be set in runtime
   selectionPassiveMode?: false,  // Enable passive mode, can be set in runtime
-  clipboardMode?: SelectionHook.ClipboardMode.DEFAULT, // Clipboard mode, can be set in runtime
-  programList?: string[]         // Program list for clipboard mode, can be set in runtime
+  clipboardMode?: SelectionHook.FilterMode.DEFAULT,    // Clipboard mode, can be set in runtime
+  clipboardFilterList?: string[]                       // Program list for clipboard mode, can be set in runtime
+  globalFilterMode?: SelectionHook.FilterMode.DEFAULT, // Global filter mode, can be set in runtime
+  globalFilterList?: string[]                          // Global program list for global filter mode, can be set in runtime
 }
 ```
 
-see [`SelectionHook.ClipboardMode`](#selectionhookclipboardmode) for details
+see [`SelectionHook.FilterMode`](#selectionhookfiltermode) for details
 
 #### **`stop(): boolean`**
 
@@ -147,7 +149,11 @@ Disable clipboard fallback for text selection. Enabled by default.
 
 #### **`setClipboardMode(mode: ClipboardMode, programList?: string[]): boolean`**
 
-Configure how clipboard fallback works with different programs. See `SelectionHook.ClipboardMode` constants for details.
+Configure how clipboard fallback works with different programs. See `SelectionHook.FilterMode` constants for details.
+
+#### **`setGlobalFilterMode(mode: FilterMode, programList?: string[]): boolean`**
+
+Configure which applications should trigger text selection events. You can include or exclude specific applications from the selection monitoring. See `SelectionHook.FilterMode` constants for details.
 
 #### **`setSelectionPassiveMode(passive: boolean): boolean`**
 
@@ -315,11 +321,13 @@ Indicates which positional data is provided:
 - `SEL_FULL`: Full selection coordinates (see [`TextSelectionData`](#textselectiondata) structure for details)
 - `SEL_DETAILED`: Detailed selection coordinates (reserved for future use)
 
-#### **`SelectionHook.ClipboardMode`**
+#### **`SelectionHook.FilterMode`**
 
-- `DEFAULT`: Use clipboard for all programs
-- `INCLUDE_LIST`: Only use clipboard for programs in list
-- `EXCLUDE_LIST`: Use clipboard for all except programs in list
+Before version `v0.9.16`, this variable was named `ClipboardMode`
+
+- `DEFAULT`: The filter mode is disabled
+- `INCLUDE_LIST`: Only the programs in list will pass the filter
+- `EXCLUDE_LIST`: Only the progrmas NOT in in list will pass the filter
 
 ### TypeScript Support
 
