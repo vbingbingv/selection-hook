@@ -227,6 +227,9 @@ private:
     // the cursor of mouse down and mouse up, for clipboard detection
     HCURSOR mouse_up_cursor = NULL;
 
+    // Store clipboard sequence number when mouse down
+    DWORD clipboard_sequence = 0;
+
     // the control type of the UI Automation focused element
     CONTROLTYPEID uia_control_type = UIA_WindowControlTypeId;
 
@@ -807,6 +810,9 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
         {
             GetWindowRect(lastWindowHandler, &lastWindowRect);
         }
+
+        // Store clipboard sequence number when mouse down
+        currentInstance->clipboard_sequence = GetClipboardSequenceNumber();
 
         break;
     }
@@ -1698,6 +1704,17 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
 
     while (checkCount < maxChecks)
     {
+        // Check if clipboard sequence number has changed since mouse down
+        if (GetClipboardSequenceNumber() != clipboard_sequence)
+        {
+            // Try to read from clipboard directly
+            if (!ReadClipboard(selectionInfo.text) || selectionInfo.text.empty())
+            {
+                return false;
+            }
+            return true;
+        }
+
         isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         isCPressing = (GetAsyncKeyState('C') & 0x8000) != 0;
         isXPressing = (GetAsyncKeyState('X') & 0x8000) != 0;
