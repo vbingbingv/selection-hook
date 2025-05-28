@@ -70,7 +70,8 @@ enum class SelectionDetectType
 {
     None = 0,
     Drag = 1,
-    DoubleClick = 2
+    DoubleClick = 2,
+    ShiftClick = 3
 };
 
 // Text selection method enum
@@ -823,10 +824,11 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
 
     delete pMouseEvent;
 
-    static POINT lastMouseUpPos = {0, 0};   // Last mouse up position
-    static DWORD lastMouseUpTime = 0;       // Last mouse up time
-    static POINT lastMouseDownPos = {0, 0}; // Last mouse down position
-    static DWORD lastMouseDownTime = 0;     // Last mouse down time
+    static POINT lastLastMouseUpPos = {0, 0}; // Last last mouse up position
+    static POINT lastMouseUpPos = {0, 0};     // Last mouse up position
+    static DWORD lastMouseUpTime = 0;         // Last mouse up time
+    static POINT lastMouseDownPos = {0, 0};   // Last mouse down position
+    static DWORD lastMouseDownTime = 0;       // Last mouse down time
 
     static bool isLastValidClick = false;
 
@@ -926,8 +928,7 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
                 if (isShiftPressed && !isCtrlPressed && !isAltPressed)
                 {
                     shouldDetectSelection = true;
-                    // shift + click is like DoubleClick because we only have one cursor pos
-                    detectionType = SelectionDetectType::DoubleClick;
+                    detectionType = SelectionDetectType::ShiftClick;
                 }
             }
 
@@ -940,6 +941,8 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
 
             isLastValidClick = isCurrentValidClick;
         }
+
+        lastLastMouseUpPos = lastMouseUpPos;
 
         lastMouseUpTime = currentTime;
         lastMouseUpPos = currentPos;
@@ -997,21 +1000,39 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
         {
             if (currentInstance->GetSelectedText(hwnd, selectionInfo) && !IsTrimmedEmpty(selectionInfo.text))
             {
-                if (detectionType == SelectionDetectType::Drag)
+
+                switch (detectionType)
+                {
+                case SelectionDetectType::Drag:
                 {
                     selectionInfo.mousePosStart = lastMouseDownPos;
                     selectionInfo.mousePosEnd = lastMouseUpPos;
 
                     if (selectionInfo.posLevel == SelectionPositionLevel::None)
                         selectionInfo.posLevel = SelectionPositionLevel::MouseDual;
+
+                    break;
                 }
-                else if (detectionType == SelectionDetectType::DoubleClick)
+                case SelectionDetectType::DoubleClick:
                 {
                     selectionInfo.mousePosStart = lastMouseUpPos;
                     selectionInfo.mousePosEnd = lastMouseUpPos;
 
                     if (selectionInfo.posLevel == SelectionPositionLevel::None)
                         selectionInfo.posLevel = SelectionPositionLevel::MouseSingle;
+
+                    break;
+                }
+                case SelectionDetectType::ShiftClick:
+                {
+                    selectionInfo.mousePosStart = lastLastMouseUpPos;
+                    selectionInfo.mousePosEnd = lastMouseUpPos;
+
+                    if (selectionInfo.posLevel == SelectionPositionLevel::None)
+                        selectionInfo.posLevel = SelectionPositionLevel::MouseDual;
+
+                    break;
+                }
                 }
 
                 auto callback = [selectionInfo](Napi::Env env, Napi::Function jsCallback)
@@ -1191,23 +1212,27 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
     if (!result)
         return false;
 
-    // decide by cursor shapes
-    HCURSOR arrowCursor = LoadCursor(NULL, IDC_ARROW);
-    HCURSOR beamCursor = LoadCursor(NULL, IDC_IBEAM);
-    // beam is surely ok
-    if (currentInstance->mouse_up_cursor != beamCursor)
+    // if trigger by user, we cannot determine the cursor shape
+    if (!is_triggered_by_user)
     {
-        if (currentInstance->mouse_up_cursor != arrowCursor)
+        // decide by cursor shapes
+        HCURSOR arrowCursor = LoadCursor(NULL, IDC_ARROW);
+        HCURSOR beamCursor = LoadCursor(NULL, IDC_IBEAM);
+        // beam is surely ok
+        if (currentInstance->mouse_up_cursor != beamCursor)
         {
-            return false;
-        }
-        /**
-         * uia_control_type: chrome devtools use UIA_GroupControlTypeId
-         * while the cursor is arrow
-         */
-        else if (uia_control_type != UIA_GroupControlTypeId)
-        {
-            return false;
+            if (currentInstance->mouse_up_cursor != arrowCursor)
+            {
+                return false;
+            }
+            /**
+             * uia_control_type: chrome devtools use UIA_GroupControlTypeId
+             * while the cursor is arrow
+             */
+            else if (uia_control_type != UIA_GroupControlTypeId)
+            {
+                return false;
+            }
         }
     }
 
@@ -1774,80 +1799,87 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     constexpr DWORD CLIPBOARD_WAIT_TIMEOUT = 150; // milliseconds
     constexpr DWORD SLEEP_INTERVAL = 5;           // milliseconds
 
-    bool isCtrlPressed = false;
-    bool isCPressed = false;
-    bool isXPressed = false;
-    bool isVPressed = false;
-    bool isCtrlPressing = false;
-    bool isShiftPressing = false;
-    bool isCPressing = false;
-    bool isXPressing = false;
-    bool isVPressing = false;
-    int checkCount = 0;
-    const int maxChecks = 5;
-
-    while (checkCount < maxChecks)
+    // If is_triggered_by_user,
+    // it means we initiated the copy action ourselves,
+    // so we can skip the key check preprocessing
+    if (!is_triggered_by_user)
     {
-        // Check if clipboard sequence number has changed since mouse down
-        if (GetClipboardSequenceNumber() != clipboard_sequence)
+
+        bool isCtrlPressed = false;
+        bool isCPressed = false;
+        bool isXPressed = false;
+        bool isVPressed = false;
+        bool isCtrlPressing = false;
+        bool isShiftPressing = false;
+        bool isCPressing = false;
+        bool isXPressing = false;
+        bool isVPressing = false;
+        int checkCount = 0;
+        const int maxChecks = 5;
+
+        while (checkCount < maxChecks)
         {
-            // Try to read from clipboard directly
-            if (!ReadClipboard(selectionInfo.text) || selectionInfo.text.empty())
+            // Check if clipboard sequence number has changed since mouse down
+            if (GetClipboardSequenceNumber() != clipboard_sequence)
+            {
+                // Try to read from clipboard directly
+                if (!ReadClipboard(selectionInfo.text) || selectionInfo.text.empty())
+                {
+                    return false;
+                }
+                return true;
+            }
+
+            isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            isShiftPressing = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
+            isCPressing = (GetAsyncKeyState('C') & 0x8000) != 0;
+            isXPressing = (GetAsyncKeyState('X') & 0x8000) != 0;
+            isVPressing = (GetAsyncKeyState('V') & 0x8000) != 0;
+
+            if (!isCtrlPressing && !isShiftPressing && !isCPressing && !isXPressing && !isVPressing)
+            {
+                break;
+            }
+            // if any of the keys are pressing,
+            // but it's not triggered by user,
+            // we will not process
+            else if (!is_triggered_by_user)
             {
                 return false;
             }
-            return true;
+
+            if (isCtrlPressing)
+                isCtrlPressed = true;
+            if (isCPressing)
+                isCPressed = true;
+            if (isXPressing)
+                isXPressed = true;
+            if (isVPressing)
+                isVPressed = true;
+
+            checkCount++;
+            Sleep(40); // Small delay between checks
         }
 
-        isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-        isShiftPressing = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-
-        isCPressing = (GetAsyncKeyState('C') & 0x8000) != 0;
-        isXPressing = (GetAsyncKeyState('X') & 0x8000) != 0;
-        isVPressing = (GetAsyncKeyState('V') & 0x8000) != 0;
-
-        if (!isCtrlPressing && !isShiftPressing && !isCPressing && !isXPressing && !isVPressing)
-        {
-            break;
-        }
-        // if any of the keys are pressing,
-        // but it's not triggered by user,
-        // we will not process
-        else if (!is_triggered_by_user)
+        // wait for user copy timeout
+        if (checkCount >= maxChecks)
         {
             return false;
         }
 
-        if (isCtrlPressing)
-            isCtrlPressed = true;
-        if (isCPressing)
-            isCPressed = true;
-        if (isXPressing)
-            isXPressed = true;
-        if (isVPressing)
-            isVPressed = true;
+        // if it's a user copy behavior, we will do nothing
+        if (isCtrlPressed && (isCPressed || isXPressed || isVPressed))
+        {
+            return false;
+        }
 
-        checkCount++;
-        Sleep(40); // Small delay between checks
-    }
-
-    // wait for user copy timeout
-    if (checkCount >= maxChecks)
-    {
-        return false;
-    }
-
-    // if it's a user copy behavior, we will do nothing
-    if (isCtrlPressed && (isCPressed || isXPressed || isVPressed))
-    {
-        return false;
-    }
-
-    // if shift is still pressing, we will not process
-    // because ctrl+shift+c is a common shortcut for other purposes
-    if (isShiftPressing)
-    {
-        return false;
+        // if shift is still pressing, we will not process
+        // because ctrl+shift+c is a common shortcut for other purposes
+        if (isShiftPressing)
+        {
+            return false;
+        }
     }
 
     // Save existing clipboard content
@@ -1885,21 +1917,37 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         return false;
     }
 
-    // Simulate Ctrl+C to copy selected text
-    INPUT inputs[4] = {};
-    inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_RCONTROL;
-    inputs[0].ki.dwFlags = 0; // Press down
-    inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = 'C';
-    inputs[1].ki.dwFlags = 0; // Press down
-    inputs[2].type = INPUT_KEYBOARD;
-    inputs[2].ki.wVk = 'C';
-    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-    inputs[3].type = INPUT_KEYBOARD;
-    inputs[3].ki.wVk = VK_RCONTROL;
-    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(4, inputs, sizeof(INPUT));
+    bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    if (!isCtrlPressing)
+    {
+        // Simulate Ctrl+C to copy selected text
+        INPUT inputs[4] = {};
+        inputs[0].type = INPUT_KEYBOARD;
+        inputs[0].ki.wVk = VK_RCONTROL;
+        inputs[0].ki.dwFlags = 0; // Press down
+        inputs[1].type = INPUT_KEYBOARD;
+        inputs[1].ki.wVk = 'C';
+        inputs[1].ki.dwFlags = 0; // Press down
+        inputs[2].type = INPUT_KEYBOARD;
+        inputs[2].ki.wVk = 'C';
+        inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[3].type = INPUT_KEYBOARD;
+        inputs[3].ki.wVk = VK_RCONTROL;
+        inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(4, inputs, sizeof(INPUT));
+    }
+    // Ctrl is pressing, we only send C
+    else
+    {
+        INPUT inputs[2] = {};
+        inputs[0].type = INPUT_KEYBOARD;
+        inputs[0].ki.wVk = 'C';
+        inputs[0].ki.dwFlags = 0; // Press down
+        inputs[1].type = INPUT_KEYBOARD;
+        inputs[1].ki.wVk = 'C';
+        inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(2, inputs, sizeof(INPUT));
+    }
 
     // Wait for clipboard change notification with polling
     bool hasNewContent = false;

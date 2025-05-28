@@ -33,6 +33,11 @@ const config = {
   passiveModeEnabled: false, // Passive mode for text selection
 };
 
+// Add variables for Ctrl key hold detection
+let ctrlKeyPressTime = null;
+let ctrlKeyTriggered = false; // Flag to prevent multiple triggers
+const CTRL_HOLD_THRESHOLD = 500; // 500ms threshold for Ctrl key hold
+
 // Program list for clipboard mode and global filter
 const programList = ["cursor.exe", "vscode.exe", "notepad.exe"];
 
@@ -104,7 +109,7 @@ function printWelcomeMessage() {
   console.log("  R - Read text from clipboard");
   console.log("  ? - Show help");
   console.log("  Ctrl+C - Exit program");
-  console.log("\nIn passive mode, press Alt key to trigger text selection");
+  console.log("\nIn passive mode, press & hold Ctrl key to trigger text selection");
 }
 
 /**
@@ -230,14 +235,38 @@ function setupKeyboardEventListeners() {
       );
     }
 
-    // Special handling for Alt key (vkCode 164) to get current selection in passive mode
-    if (eventData.vkCode === 164 && config.passiveModeEnabled) {
-      console.log(colors.info, "Alt pressed, requesting current selection in passive mode");
-      const selectionData = hook.getCurrentSelection();
-      if (selectionData) {
-        showSelection(selectionData);
-      } else {
-        console.log(colors.warning, "No selection data available");
+    // Handle Ctrl+C for exit
+    if (eventData.vkCode === 67 && eventData.flags & 0x0001) {
+      // 67 is 'C', 0x0001 is Ctrl flag
+      cleanup();
+      return;
+    }
+
+    // Special handling for Ctrl key (vkCode 162) to get current selection in passive mode
+    if (eventData.vkCode === 162 && config.passiveModeEnabled) {
+      const currentTime = Date.now();
+
+      // Initialize press time if not set
+      if (ctrlKeyPressTime === null) {
+        ctrlKeyPressTime = currentTime;
+        ctrlKeyTriggered = false; // Reset trigger flag
+        return;
+      }
+
+      // Check if held long enough and not already triggered
+      const holdDuration = currentTime - ctrlKeyPressTime;
+      if (holdDuration >= CTRL_HOLD_THRESHOLD && !ctrlKeyTriggered) {
+        console.log(
+          colors.info,
+          `Ctrl held for ${holdDuration}ms, requesting current selection in passive mode`
+        );
+        const selectionData = hook.getCurrentSelection();
+        if (selectionData) {
+          showSelection(selectionData);
+        } else {
+          console.log(colors.warning, "No selection data available");
+        }
+        ctrlKeyTriggered = true; // Set flag to prevent further triggers
       }
     }
   });
@@ -252,6 +281,12 @@ function setupKeyboardEventListeners() {
           eventData.sys ? ", system key" : ""
         }`
       );
+    }
+
+    // Reset variables when Ctrl is released
+    if (eventData.vkCode === 162 && config.passiveModeEnabled) {
+      ctrlKeyPressTime = null;
+      ctrlKeyTriggered = false;
     }
   });
 }
@@ -423,7 +458,7 @@ function togglePassiveMode() {
       `Passive mode: ${config.passiveModeEnabled ? "ENABLED" : "DISABLED"}`
     );
     if (config.passiveModeEnabled) {
-      console.log(colors.info, "Press Alt key (vkCode 164) to trigger text selection manually");
+      console.log(colors.info, "Press & hold Ctrl key to trigger text selection manually");
     }
   } else {
     config.passiveModeEnabled = !config.passiveModeEnabled; // Revert the toggle
@@ -500,14 +535,9 @@ function showSelection(selectionData) {
     return;
   }
 
-  console.log(colors.info, "=== Detected selected text ===");
+  console.log(colors.info, `=== Detected selected text (${selectionData.text.length}) ===`);
 
-  console.log(
-    colors.info,
-    `Text Length: ${selectionData.text.length}\nText Content: ${selectionData.text
-      .replace(/\r\n/g, "\n")
-      .replace(/\r(?!\n)/g, "\n")}`
-  );
+  console.log(selectionData.text.replace(/\r\n/g, "\n").replace(/\r(?!\n)/g, "\n"));
 
   // Selection method and position level maps
   const methodMap = {
