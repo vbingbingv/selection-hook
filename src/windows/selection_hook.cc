@@ -1218,18 +1218,56 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
         // decide by cursor shapes
         HCURSOR arrowCursor = LoadCursor(NULL, IDC_ARROW);
         HCURSOR beamCursor = LoadCursor(NULL, IDC_IBEAM);
+        HCURSOR handCursor = LoadCursor(NULL, IDC_HAND);
+
         // beam is surely ok
         if (currentInstance->mouse_up_cursor != beamCursor)
         {
-            if (currentInstance->mouse_up_cursor != arrowCursor)
+
+            // not beam, not arrow, not hand: invalid text selection cursor
+            if (currentInstance->mouse_up_cursor != arrowCursor && currentInstance->mouse_up_cursor != handCursor)
             {
-                return false;
+                /**
+                 * Check if the current cursor is a system cursor.
+                 * If it's not a system cursor, we can't determine its type,
+                 * so we allow copy operations by default
+                 *
+                 * eg. Adobe Acrobat uses a custom cursor
+                 */
+                const int numOfRemainedSysCursors = 13;
+                LPCTSTR remainedSysCursors[numOfRemainedSysCursors] = {
+                    IDC_WAIT, IDC_CROSS, IDC_UPARROW, IDC_SIZE, IDC_ICON,
+                    IDC_SIZENWSE, IDC_SIZENESW, IDC_SIZEWE, IDC_SIZENS,
+                    IDC_SIZEALL, IDC_NO, IDC_APPSTARTING, IDC_HELP};
+
+                bool isRemainedSysCursor = false;
+                for (int i = 0; i < numOfRemainedSysCursors; i++)
+                {
+                    if (currentInstance->mouse_up_cursor == LoadCursor(NULL, remainedSysCursors[i]))
+                    {
+                        isRemainedSysCursor = true;
+                        break;
+                    }
+                }
+
+                if (isRemainedSysCursor)
+                {
+                    return false;
+                }
+                else
+                {
+                    return true;
+                }
             }
             /**
-             * uia_control_type: chrome devtools use UIA_GroupControlTypeId
-             * while the cursor is arrow
+             * not beam, but arrow or hand:
+             *
+             * uia_control_type exceptions (when the cursor is arrow or hand):
+             *
+             * chrome devtools: UIA_GroupControlTypeId (50026)
+             * chrome pages: UIA_DocumentControlTypeId (50030), UIA_TextControlTypeId (50020)
              */
-            else if (uia_control_type != UIA_GroupControlTypeId)
+            else if (uia_control_type != UIA_GroupControlTypeId && uia_control_type != UIA_DocumentControlTypeId && uia_control_type != UIA_TextControlTypeId)
             {
                 return false;
             }
