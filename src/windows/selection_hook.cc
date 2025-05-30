@@ -1834,8 +1834,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     if (!hwnd)
         return false;
 
-    constexpr DWORD CLIPBOARD_WAIT_TIMEOUT = 150; // milliseconds
-    constexpr DWORD SLEEP_INTERVAL = 5;           // milliseconds
+    constexpr DWORD SLEEP_INTERVAL = 5; // milliseconds
 
     // If is_triggered_by_user,
     // it means we initiated the copy action ourselves,
@@ -1920,6 +1919,35 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         }
     }
 
+    // renew the clipboard sequence number
+    clipboard_sequence = GetClipboardSequenceNumber();
+
+    // Send MFC standard Copy command. (eg. XShell)
+    LRESULT result = SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(57634, 0), 0);
+    if (result > 0)
+    {
+        // Wait for clipboard update with polling
+        // max wait time about 5m * 10 = 50ms
+        for (int i = 0; i < 10; i++)
+        {
+            if (GetClipboardSequenceNumber() != clipboard_sequence)
+            {
+                // Try to read from clipboard directly
+                if (ReadClipboard(selectionInfo.text) && !selectionInfo.text.empty())
+                {
+                    return true;
+                }
+            }
+            Sleep(SLEEP_INTERVAL);
+        }
+    }
+
+    /**
+     * we have another way to get the text: Ctrl+Insert
+     * but it may not work for some apps not supporting it,
+     * and the shortcut may be used by other purposes
+     */
+
     // Save existing clipboard content
     std::wstring existingContent;
     if (OpenClipboard(nullptr))
@@ -1934,27 +1962,10 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         return false;
     }
 
-    // Setup clipboard format listener
-    HWND hwndClipboardListener = CreateWindowExW(0, L"STATIC", L"ClipboardListener",
-                                                 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
-    if (!hwndClipboardListener)
-    {
-        // Restore clipboard and exit if listener creation failed
-        if (!existingContent.empty())
-            WriteClipboard(existingContent);
-        return false;
-    }
+    // renew the clipboard sequence number
+    clipboard_sequence = GetClipboardSequenceNumber();
 
-    // Register for clipboard updates
-    bool listenerAdded = AddClipboardFormatListener(hwndClipboardListener) != 0;
-    if (!listenerAdded)
-    {
-        DestroyWindow(hwndClipboardListener);
-        if (!existingContent.empty())
-            WriteClipboard(existingContent);
-        return false;
-    }
-
+    // get ready to send Ctrl+C
     bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
     if (!isCtrlPressing)
     {
@@ -1987,24 +1998,18 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         SendInput(2, inputs, sizeof(INPUT));
     }
 
-    // Wait for clipboard change notification with polling
+    // Wait for clipboard update with polling
     bool hasNewContent = false;
-    MSG msg = {0};
-    DWORD startTime = GetTickCount();
-
-    while (GetTickCount() - startTime < CLIPBOARD_WAIT_TIMEOUT)
+    // max wait time about 5m * 30 = 150ms
+    for (int i = 0; i < 30; i++)
     {
-        if (PeekMessage(&msg, hwndClipboardListener, WM_CLIPBOARDUPDATE, WM_CLIPBOARDUPDATE, PM_REMOVE))
+        if (GetClipboardSequenceNumber() != clipboard_sequence)
         {
             hasNewContent = true;
             break;
         }
-        Sleep(SLEEP_INTERVAL); // More efficient polling interval
+        Sleep(SLEEP_INTERVAL);
     }
-
-    // Clean up listener
-    RemoveClipboardFormatListener(hwndClipboardListener);
-    DestroyWindow(hwndClipboardListener);
 
     // Handle case when no clipboard update was detected
     if (!hasNewContent)
@@ -2013,6 +2018,10 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
             WriteClipboard(existingContent);
         return false;
     }
+
+    // some apps will change the clipboard content many times after the first time GetClipboardSequenceNumber() changed
+    // so we need to wait a little bit (eg. Adobe Acrobat)
+    Sleep(50);
 
     // Read the new clipboard content
     bool readSuccess = ReadClipboard(selectionInfo.text);
