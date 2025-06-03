@@ -29,9 +29,10 @@
 
 #include <napi.h>
 #include <windows.h>
-#include <oleacc.h>
-#include <UIAutomation.h>
-#include <ShellScalingApi.h>
+#include <UIAutomation.h>    // For UI Automation
+#include <oleacc.h>          // For IAccessible
+#include <ShellScalingApi.h> // For SetProcessDpiAwareness
+#include <shellapi.h>        // For SHQueryUserNotificationState
 
 #include <atomic>
 #include <string>
@@ -41,9 +42,10 @@
 #include "lib/utils.h"
 #include "lib/clipboard.h"
 
-#pragma comment(lib, "Oleacc.lib")
-#pragma comment(lib, "UIAutomationCore.lib")
-#pragma comment(lib, "Shcore.lib")
+#pragma comment(lib, "UIAutomationCore.lib") // For UI Automation
+#pragma comment(lib, "Oleacc.lib")           // For IAccessible
+#pragma comment(lib, "Shcore.lib")           // For SetProcessDpiAwareness
+#pragma comment(lib, "Shell32.lib")          // For SHQueryUserNotificationState
 
 // UI Automation constants (if not defined)
 #ifndef UIA_IsSelectionActivePropertyId
@@ -255,6 +257,7 @@ private:
     bool GetTextViaAccessible(HWND hwnd, TextSelectionInfo &selectionInfo);
     bool GetTextViaFocusedControl(HWND hwnd, TextSelectionInfo &selectionInfo);
     bool GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionInfo);
+    bool ShouldProcessGetSelection(); // check if we should get text based on system state
     bool ShouldProcessViaClipboard(HWND hwnd, std::wstring &programName);
     bool SetTextRangeCoordinates(IUIAutomationTextRange *pRange, TextSelectionInfo &selectionInfo);
     bool IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList);
@@ -555,6 +558,11 @@ Napi::Value SelectionHook::GetCurrentSelection(const Napi::CallbackInfo &info)
 
     try
     {
+        if (!ShouldProcessGetSelection())
+        {
+            return env.Null();
+        }
+
         // Get the currently active window
         // use GetWindowUnderMouse() to get because some key(like alt) may blur the foreground window
         // HWND hwnd = GetForegroundWindow();
@@ -818,6 +826,12 @@ bool SelectionHook::IsInFilterList(const std::wstring &programName, const std::v
  */
 void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, MouseEventContext *pMouseEvent)
 {
+    if (!currentInstance->ShouldProcessGetSelection())
+    {
+        delete pMouseEvent;
+        return;
+    }
+
     auto mEvent = pMouseEvent->event;
     auto nMouseData = pMouseEvent->mouseData;
     POINT currentPos = {pMouseEvent->ptX, pMouseEvent->ptY};
@@ -1065,6 +1079,12 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
  */
 void SelectionHook::ProcessKeyboardEvent(Napi::Env env, Napi::Function function, KeyboardEventContext *pKeyboardEvent)
 {
+    if (!currentInstance->ShouldProcessGetSelection())
+    {
+        delete pKeyboardEvent;
+        return;
+    }
+
     auto kEvent = pKeyboardEvent->event;
     auto vkCode = pKeyboardEvent->vkCode;
     auto scanCode = pKeyboardEvent->scanCode;
@@ -1185,6 +1205,44 @@ bool SelectionHook::GetSelectedText(HWND hwnd, TextSelectionInfo &selectionInfo)
 
     is_processing.store(false);
     return false;
+}
+
+/**
+ * Check if current system state allows text selection
+ * time comsuming is 0.3ms, so uses a 10-second cache to reduce system calls
+ * @return true if system is in a state that allows text selection
+ */
+bool SelectionHook::ShouldProcessGetSelection()
+{
+    static bool lastResult = true;
+    static DWORD lastCheckTime = 0;
+
+    // If less than 10 seconds have passed, return cached result
+    if (GetTickCount() - lastCheckTime < 10000)
+    {
+        return lastResult;
+    }
+
+    QUERY_USER_NOTIFICATION_STATE state;
+    HRESULT hr = SHQueryUserNotificationState(&state);
+
+    // Update timestamp
+    lastCheckTime = GetTickCount();
+
+    if (FAILED(hr))
+    {
+        lastResult = true; // If we can't determine state, allow text selection by default
+        return lastResult;
+    }
+
+    // Don't get text in these states:
+    // QUNS_RUNNING_D3D_FULL_SCREEN (3) - Running in full-screen mode
+    // QUNS_BUSY (4) - System is busy
+    // QUNS_PRESENTATION_MODE (5) - Presentation mode
+    lastResult = state != QUNS_RUNNING_D3D_FULL_SCREEN &&
+                 state != QUNS_BUSY &&
+                 state != QUNS_PRESENTATION_MODE;
+    return lastResult;
 }
 
 /**
