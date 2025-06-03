@@ -29,8 +29,8 @@
 
 #include <napi.h>
 #include <windows.h>
-#include <UIAutomation.h>    // For UI Automation
 #include <oleacc.h>          // For IAccessible
+#include <UIAutomation.h>    // For UI Automation
 #include <ShellScalingApi.h> // For SetProcessDpiAwareness
 #include <shellapi.h>        // For SHQueryUserNotificationState
 
@@ -42,8 +42,8 @@
 #include "lib/utils.h"
 #include "lib/clipboard.h"
 
-#pragma comment(lib, "UIAutomationCore.lib") // For UI Automation
 #pragma comment(lib, "Oleacc.lib")           // For IAccessible
+#pragma comment(lib, "UIAutomationCore.lib") // For UI Automation
 #pragma comment(lib, "Shcore.lib")           // For SetProcessDpiAwareness
 #pragma comment(lib, "Shell32.lib")          // For SHQueryUserNotificationState
 
@@ -1225,6 +1225,8 @@ bool SelectionHook::ShouldProcessGetSelection()
 
     QUERY_USER_NOTIFICATION_STATE state;
     HRESULT hr = SHQueryUserNotificationState(&state);
+
+    // printf("SHQueryUserNotificationState(state: %d)\n", state);
 
     // Update timestamp
     lastCheckTime = GetTickCount();
