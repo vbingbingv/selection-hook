@@ -1226,8 +1226,6 @@ bool SelectionHook::ShouldProcessGetSelection()
     QUERY_USER_NOTIFICATION_STATE state;
     HRESULT hr = SHQueryUserNotificationState(&state);
 
-    // printf("SHQueryUserNotificationState(state: %d)\n", state);
-
     // Update timestamp
     lastCheckTime = GetTickCount();
 
