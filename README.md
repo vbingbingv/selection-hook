@@ -159,6 +159,8 @@ Configure which applications should trigger text selection events. You can inclu
 
 Configure fine-tuned lists for specific application behaviors. This allows you to customize how the selection hook behaves with certain applications that may have unique characteristics.
 
+For example, you can add `acrobat.exe` to those lists to enable text seleted in Acrobat.
+
 List types:
 - `EXCLUDE_CLIPBOARD_CURSOR_DETECT`: Exclude cursor detection for clipboard operations
 - `INCLUDE_CLIPBOARD_DELAY_READ`: Include delay when reading clipboard content 
