@@ -31,6 +31,7 @@ const config = {
   clipboardMode: 0, // Default clipboard mode (see SelectionHook.FilterMode)
   globalFilterMode: 0, // Default global filter mode (see SelectionHook.FilterMode)
   passiveModeEnabled: false, // Passive mode for text selection
+  fineTunedListEnabled: false, // Fine-tuned list for specific application behaviors
 };
 
 // Add variables for Ctrl key hold detection
@@ -40,6 +41,9 @@ const CTRL_HOLD_THRESHOLD = 500; // 500ms threshold for Ctrl key hold
 
 // Program list for clipboard mode and global filter
 const programList = ["cursor.exe", "vscode.exe", "notepad.exe"];
+
+// Fine-tuned list for specific application behaviors
+const fineTunedList = ["acrobat.exe", "wps.exe", "cajviewer.exe"];
 
 /**
  * ANSI color codes for console output formatting
@@ -105,6 +109,7 @@ function printWelcomeMessage() {
   console.log("  L - Toggle clipboard mode (DEFAULT → EXCLUDE_LIST → INCLUDE_LIST)");
   console.log("  F - Toggle global filter mode (DEFAULT → EXCLUDE_LIST → INCLUDE_LIST)");
   console.log("  P - Toggle passive mode (default: OFF)");
+  console.log("  T - Toggle fine-tuned list (default: OFF)");
   console.log("  W - Write text 'Test clipboard write from selection-hook' to clipboard");
   console.log("  R - Read text from clipboard");
   console.log("  ? - Show help");
@@ -381,6 +386,10 @@ function handleKeyPress(key) {
       togglePassiveMode();
       break;
 
+    case "t": // Toggle fine-tuned list
+      toggleFineTunedList();
+      break;
+
     case "w":
       // Write test text to clipboard
       const testText = "Test clipboard write from selection-hook";
@@ -463,6 +472,49 @@ function togglePassiveMode() {
   } else {
     config.passiveModeEnabled = !config.passiveModeEnabled; // Revert the toggle
     console.log(colors.error, "Failed to set passive mode");
+  }
+}
+
+/**
+ * Toggle fine-tuned list for specific application behaviors
+ */
+function toggleFineTunedList() {
+  config.fineTunedListEnabled = !config.fineTunedListEnabled;
+
+  const programList = config.fineTunedListEnabled ? fineTunedList : [];
+
+  // Set fine-tuned list for both types simultaneously
+  const excludeClipboardSuccess = hook.setFineTunedList(
+    SelectionHook.FineTunedListType.EXCLUDE_CLIPBOARD_CURSOR_DETECT,
+    programList
+  );
+
+  const includeDelaySuccess = hook.setFineTunedList(
+    SelectionHook.FineTunedListType.INCLUDE_CLIPBOARD_DELAY_READ,
+    programList
+  );
+
+  if (excludeClipboardSuccess && includeDelaySuccess) {
+    console.log(
+      colors.success,
+      `Fine-tuned list: ${config.fineTunedListEnabled ? "ENABLED" : "DISABLED"}`
+    );
+    if (config.fineTunedListEnabled) {
+      console.log(colors.info, `Programs in fine-tuned list: ${fineTunedList.join(", ")}`);
+      console.log(
+        colors.info,
+        "Applied to both EXCLUDE_CLIPBOARD_CURSOR_DETECT and INCLUDE_CLIPBOARD_DELAY_READ"
+      );
+    }
+  } else {
+    config.fineTunedListEnabled = !config.fineTunedListEnabled; // Revert the toggle
+    console.log(colors.error, "Failed to set fine-tuned list");
+    if (!excludeClipboardSuccess) {
+      console.log(colors.error, "- EXCLUDE_CLIPBOARD_CURSOR_DETECT failed");
+    }
+    if (!includeDelaySuccess) {
+      console.log(colors.error, "- INCLUDE_CLIPBOARD_DELAY_READ failed");
+    }
   }
 }
 

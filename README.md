@@ -155,6 +155,16 @@ Configure how clipboard fallback works with different programs. See `SelectionHo
 
 Configure which applications should trigger text selection events. You can include or exclude specific applications from the selection monitoring. See `SelectionHook.FilterMode` constants for details.
 
+#### **`setFineTunedList(listType: FineTunedListType, programList?: string[]): boolean`**
+
+Configure fine-tuned lists for specific application behaviors. This allows you to customize how the selection hook behaves with certain applications that may have unique characteristics.
+
+List types:
+- `EXCLUDE_CLIPBOARD_CURSOR_DETECT`: Exclude cursor detection for clipboard operations
+- `INCLUDE_CLIPBOARD_DELAY_READ`: Include delay when reading clipboard content 
+
+See `SelectionHook.FineTunedListType` constants for details.
+
 #### **`setSelectionPassiveMode(passive: boolean): boolean`**
 
 Set passive mode for selection (only triggered by getCurrentSelection, `text-selection` event will not be emitted).
@@ -328,6 +338,13 @@ Before version `v0.9.16`, this variable was named `ClipboardMode`
 - `DEFAULT`: The filter mode is disabled
 - `INCLUDE_LIST`: Only the programs in list will pass the filter
 - `EXCLUDE_LIST`: Only the progrmas NOT in in list will pass the filter
+
+#### **`SelectionHook.FineTunedListType`**
+
+Defines types for fine-tuned application behavior lists:
+
+- `EXCLUDE_CLIPBOARD_CURSOR_DETECT`: Exclude cursor detection for clipboard operations. Useful for applications with custom cursors (e.g., Adobe Acrobat) where cursor shape detection may not work reliably.
+- `INCLUDE_CLIPBOARD_DELAY_READ`: Include delay when reading clipboard content. Useful for applications that modify clipboard content multiple times in quick succession (e.g., Adobe Acrobat).
 
 ### TypeScript Support
 

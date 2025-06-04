@@ -51,6 +51,11 @@ class SelectionHook extends EventEmitter {
     EXCLUDE_LIST: 2,
   };
 
+  static FineTunedListType = {
+    EXCLUDE_CLIPBOARD_CURSOR_DETECT: 0,
+    INCLUDE_CLIPBOARD_DELAY_READ: 1,
+  };
+
   constructor() {
     if (!nativeModule) {
       throw new Error("Native module failed to load - only works on Windows");
@@ -301,6 +306,41 @@ class SelectionHook extends EventEmitter {
       return true;
     } catch (err) {
       this.#handleError("Failed to set global filter mode and list", err);
+      return false;
+    }
+  }
+
+  /**
+   * Set fine-tuned list for specific behaviors
+   *
+   * Configures fine-tuned lists for specific application behaviors.
+   * List types:
+   * - EXCLUDE_CLIPBOARD_CURSOR_DETECT: Exclude cursor detection for clipboard operations
+   * - INCLUDE_CLIPBOARD_DELAY_READ: Include delay when reading clipboard content
+   *
+   * @param {number} listType - Fine-tuned list type (SelectionHook.FineTunedListType)
+   * @param {string[]} programList - Array of program names for the fine-tuned list
+   * @returns {boolean} Success status
+   */
+  setFineTunedList(listType, programList = []) {
+    if (!this.#checkRunning()) return false;
+
+    const validTypes = Object.values(SelectionHook.FineTunedListType);
+    if (!validTypes.includes(listType)) {
+      this.#handleError("Invalid fine-tuned list type", new Error("Invalid argument"));
+      return false;
+    }
+
+    if (!Array.isArray(programList)) {
+      this.#handleError("Program list must be an array", new Error("Invalid argument"));
+      return false;
+    }
+
+    try {
+      this.#instance.setFineTunedList(listType, programList);
+      return true;
+    } catch (err) {
+      this.#handleError("Failed to set fine-tuned list", err);
       return false;
     }
   }

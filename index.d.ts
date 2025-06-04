@@ -142,6 +142,11 @@ declare class SelectionHook extends EventEmitter {
     EXCLUDE_LIST: 2;
   };
 
+  static FineTunedListType: {
+    EXCLUDE_CLIPBOARD_CURSOR_DETECT: 0;
+    INCLUDE_CLIPBOARD_DELAY_READ: 1;
+  };
+
   /**
    * Start monitoring text selections
    *
@@ -256,6 +261,23 @@ declare class SelectionHook extends EventEmitter {
    */
   setGlobalFilterMode(
     mode: (typeof SelectionHook.FilterMode)[keyof typeof SelectionHook.FilterMode],
+    programList?: string[]
+  ): boolean;
+
+  /**
+   * Set fine-tuned list for specific behaviors
+   *
+   * Configures fine-tuned lists for specific application behaviors.
+   * List types:
+   * - EXCLUDE_CLIPBOARD_CURSOR_DETECT: Exclude cursor detection for clipboard operations
+   * - INCLUDE_CLIPBOARD_DELAY_READ: Include delay when reading clipboard content
+   *
+   * @param {number} listType - Fine-tuned list type (SelectionHook.FineTunedListType)
+   * @param {string[]} programList - Array of program names for the fine-tuned list
+   * @returns {boolean} Success status
+   */
+  setFineTunedList(
+    listType: (typeof SelectionHook.FineTunedListType)[keyof typeof SelectionHook.FineTunedListType],
     programList?: string[]
   ): boolean;
 

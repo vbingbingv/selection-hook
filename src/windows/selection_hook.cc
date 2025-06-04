@@ -118,6 +118,19 @@ enum class FilterMode
     ExcludeList = 2  // only trigger when the program name is not in the exclude list
 };
 
+enum class FineTunedListType
+{
+    ExcludeClipboardCursorDetect = 0,
+    IncludeClipboardDelayRead = 1
+};
+
+// Copy key type enum for SendCopyKey function
+enum class CopyKeyType
+{
+    CtrlInsert = 0,
+    CtrlC = 1
+};
+
 /**
  * Structure to store text selection information
  */
@@ -205,13 +218,35 @@ private:
     void DisableClipboard(const Napi::CallbackInfo &info);
     void SetClipboardMode(const Napi::CallbackInfo &info);
     void SetGlobalFilterMode(const Napi::CallbackInfo &info);
+    void SetFineTunedList(const Napi::CallbackInfo &info);
     void SetSelectionPassiveMode(const Napi::CallbackInfo &info);
     Napi::Value GetCurrentSelection(const Napi::CallbackInfo &info);
     Napi::Value WriteToClipboard(const Napi::CallbackInfo &info);
     Napi::Value ReadFromClipboard(const Napi::CallbackInfo &info);
 
-    // UI Automation objects
-    IUIAutomation *pUIAutomation = nullptr;
+    // Core functionality methods
+    bool GetSelectedText(HWND hwnd, TextSelectionInfo &selectionInfo);
+    bool GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selectionInfo);
+    bool GetTextViaAccessible(HWND hwnd, TextSelectionInfo &selectionInfo);
+    bool GetTextViaFocusedControl(HWND hwnd, TextSelectionInfo &selectionInfo);
+    bool GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionInfo);
+    bool ShouldProcessGetSelection(); // check if we should get text based on system state
+    bool ShouldProcessViaClipboard(HWND hwnd, std::wstring &programName);
+    bool SetTextRangeCoordinates(IUIAutomationTextRange *pRange, TextSelectionInfo &selectionInfo);
+    Napi::Object CreateSelectionResultObject(Napi::Env env, const TextSelectionInfo &selectionInfo);
+
+    // Helper method for processing string arrays
+    bool IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList);
+    void ProcessStringArrayToList(const Napi::Array &array, std::vector<std::string> &targetList);
+    void SendCopyKey(CopyKeyType type); // Keyboard input helper method
+
+    // Mouse and keyboard event handling methods
+    static DWORD WINAPI MouseKeyboardHookThreadProc(LPVOID lpParam);
+    static LRESULT CALLBACK MouseHookCallback(int nCode, WPARAM wParam, LPARAM lParam);
+    static LRESULT CALLBACK KeyboardHookCallback(int nCode, WPARAM wParam, LPARAM lParam);
+    static void ProcessMouseEvent(Napi::Env env, Napi::Function function, MouseEventContext *mouseEvent);
+    static void ProcessKeyboardEvent(Napi::Env env, Napi::Function function, KeyboardEventContext *keyboardEvent);
+
     bool com_initialized_by_us = false; // Flag indicating whether COM was initialized by this module
 
     // Thread communication
@@ -225,12 +260,17 @@ private:
     HANDLE mouse_keyboard_hook_thread = NULL;
     DWORD mouse_keyboard_thread_id = 0;
 
-    bool is_triggered_by_user = false; // user use GetCurrentSelection
+    // the text selection is processing, we should ignore some events
+    std::atomic<bool> is_processing{false};
+    // user use GetCurrentSelection
+    bool is_triggered_by_user = false;
 
     bool is_enabled_mouse_move_event = false;
     // the cursor of mouse down and mouse up, for clipboard detection
     HCURSOR mouse_up_cursor = NULL;
 
+    // UI Automation objects
+    IUIAutomation *pUIAutomation = nullptr;
     // the control type of the UI Automation focused element
     CONTROLTYPEID uia_control_type = UIA_WindowControlTypeId;
 
@@ -248,27 +288,14 @@ private:
     FilterMode global_filter_mode = FilterMode::Default;
     std::vector<std::string> global_filter_list;
 
-    // the text selection is processing, we should ignore some events
-    std::atomic<bool> is_processing{false};
-
-    // Core functionality methods
-    bool GetSelectedText(HWND hwnd, TextSelectionInfo &selectionInfo);
-    bool GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selectionInfo);
-    bool GetTextViaAccessible(HWND hwnd, TextSelectionInfo &selectionInfo);
-    bool GetTextViaFocusedControl(HWND hwnd, TextSelectionInfo &selectionInfo);
-    bool GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionInfo);
-    bool ShouldProcessGetSelection(); // check if we should get text based on system state
-    bool ShouldProcessViaClipboard(HWND hwnd, std::wstring &programName);
-    bool SetTextRangeCoordinates(IUIAutomationTextRange *pRange, TextSelectionInfo &selectionInfo);
-    bool IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList);
-    Napi::Object CreateSelectionResultObject(Napi::Env env, const TextSelectionInfo &selectionInfo);
-
-    // Mouse and keyboard event handling methods
-    static DWORD WINAPI MouseKeyboardHookThreadProc(LPVOID lpParam);
-    static LRESULT CALLBACK MouseHookCallback(int nCode, WPARAM wParam, LPARAM lParam);
-    static LRESULT CALLBACK KeyboardHookCallback(int nCode, WPARAM wParam, LPARAM lParam);
-    static void ProcessMouseEvent(Napi::Env env, Napi::Function function, MouseEventContext *mouseEvent);
-    static void ProcessKeyboardEvent(Napi::Env env, Napi::Function function, KeyboardEventContext *keyboardEvent);
+    // fine-tuned lists (ftl) for some apps
+    //
+    // we use cursor detection to determine if we should go on process clipboard detection,
+    // but some apps will use self-defined cursor, you can exclude them to keep using clipboard. (eg. Adobe Acrobat)
+    std::vector<std::string> ftl_exclude_clipboard_cursor_detect;
+    // some apps will change the clipboard content many times, and it cost time
+    // you can include them to wait a little bit (eg. Adobe Acrobat)
+    std::vector<std::string> ftl_include_clipboard_delay_read;
 };
 
 // Static member initialization
@@ -402,7 +429,7 @@ Napi::Object SelectionHook::Init(Napi::Env env, Napi::Object exports)
     Napi::HandleScope scope(env);
 
     // Define class with JavaScript-accessible methods
-    Napi::Function func = DefineClass(env, "TextSelectionHook", {InstanceMethod("start", &SelectionHook::Start), InstanceMethod("stop", &SelectionHook::Stop), InstanceMethod("enableMouseMoveEvent", &SelectionHook::EnableMouseMoveEvent), InstanceMethod("disableMouseMoveEvent", &SelectionHook::DisableMouseMoveEvent), InstanceMethod("enableClipboard", &SelectionHook::EnableClipboard), InstanceMethod("disableClipboard", &SelectionHook::DisableClipboard), InstanceMethod("setClipboardMode", &SelectionHook::SetClipboardMode), InstanceMethod("setGlobalFilterMode", &SelectionHook::SetGlobalFilterMode), InstanceMethod("setSelectionPassiveMode", &SelectionHook::SetSelectionPassiveMode), InstanceMethod("getCurrentSelection", &SelectionHook::GetCurrentSelection), InstanceMethod("writeToClipboard", &SelectionHook::WriteToClipboard), InstanceMethod("readFromClipboard", &SelectionHook::ReadFromClipboard)});
+    Napi::Function func = DefineClass(env, "TextSelectionHook", {InstanceMethod("start", &SelectionHook::Start), InstanceMethod("stop", &SelectionHook::Stop), InstanceMethod("enableMouseMoveEvent", &SelectionHook::EnableMouseMoveEvent), InstanceMethod("disableMouseMoveEvent", &SelectionHook::DisableMouseMoveEvent), InstanceMethod("enableClipboard", &SelectionHook::EnableClipboard), InstanceMethod("disableClipboard", &SelectionHook::DisableClipboard), InstanceMethod("setClipboardMode", &SelectionHook::SetClipboardMode), InstanceMethod("setGlobalFilterMode", &SelectionHook::SetGlobalFilterMode), InstanceMethod("setFineTunedList", &SelectionHook::SetFineTunedList), InstanceMethod("setSelectionPassiveMode", &SelectionHook::SetSelectionPassiveMode), InstanceMethod("getCurrentSelection", &SelectionHook::GetCurrentSelection), InstanceMethod("writeToClipboard", &SelectionHook::WriteToClipboard), InstanceMethod("readFromClipboard", &SelectionHook::ReadFromClipboard)});
 
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
@@ -610,6 +637,22 @@ void SelectionHook::DisableMouseMoveEvent(const Napi::CallbackInfo &info)
 }
 
 /**
+ * NAPI: Set selection passive mode
+ */
+void SelectionHook::SetSelectionPassiveMode(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    // Validate arguments
+    if (info.Length() < 1 || !info[0u].IsBoolean())
+    {
+        Napi::TypeError::New(env, "Boolean expected as argument").ThrowAsJavaScriptException();
+        return;
+    }
+
+    is_selection_passive_mode = info[0u].As<Napi::Boolean>().Value();
+}
+
+/**
  * NAPI: Enable clipboard fallback
  */
 void SelectionHook::EnableClipboard(const Napi::CallbackInfo &info)
@@ -642,30 +685,10 @@ void SelectionHook::SetClipboardMode(const Napi::CallbackInfo &info)
     int mode = info[0u].As<Napi::Number>().Int32Value();
     clipboard_filter_mode = static_cast<FilterMode>(mode);
 
-    Napi::Array includeArray = info[1u].As<Napi::Array>();
-    uint32_t length = includeArray.Length();
+    Napi::Array listArray = info[1u].As<Napi::Array>();
 
-    // Clear existing list
-    clipboard_filter_list.clear();
-
-    // Process each string in the array
-    for (uint32_t i = 0; i < length; i++)
-    {
-        Napi::Value value = includeArray.Get(i);
-        if (value.IsString())
-        {
-            // Get the UTF-8 string
-            std::string programName = value.As<Napi::String>().Utf8Value();
-
-            // Convert to lowercase
-            std::transform(programName.begin(), programName.end(), programName.begin(),
-                           [](unsigned char c)
-                           { return std::tolower(c); });
-
-            // Add to the include list (store as UTF-8)
-            clipboard_filter_list.push_back(programName);
-        }
-    }
+    // Use helper method to process the array
+    ProcessStringArrayToList(listArray, clipboard_filter_list);
 }
 
 /**
@@ -685,46 +708,48 @@ void SelectionHook::SetGlobalFilterMode(const Napi::CallbackInfo &info)
     int mode = info[0u].As<Napi::Number>().Int32Value();
     global_filter_mode = static_cast<FilterMode>(mode);
 
-    Napi::Array includeArray = info[1u].As<Napi::Array>();
-    uint32_t length = includeArray.Length();
+    Napi::Array listArray = info[1u].As<Napi::Array>();
 
-    // Clear existing list
-    global_filter_list.clear();
-
-    // Process each string in the array
-    for (uint32_t i = 0; i < length; i++)
-    {
-        Napi::Value value = includeArray.Get(i);
-        if (value.IsString())
-        {
-            // Get the UTF-8 string
-            std::string programName = value.As<Napi::String>().Utf8Value();
-
-            // Convert to lowercase
-            std::transform(programName.begin(), programName.end(), programName.begin(),
-                           [](unsigned char c)
-                           { return std::tolower(c); });
-
-            // Add to the include list (store as UTF-8)
-            global_filter_list.push_back(programName);
-        }
-    }
+    // Use helper method to process the array
+    ProcessStringArrayToList(listArray, global_filter_list);
 }
 
 /**
- * NAPI: Set selection passive mode
+ * NAPI: Set fine-tuned list based on type
  */
-void SelectionHook::SetSelectionPassiveMode(const Napi::CallbackInfo &info)
+void SelectionHook::SetFineTunedList(const Napi::CallbackInfo &info)
 {
     Napi::Env env = info.Env();
     // Validate arguments
-    if (info.Length() < 1 || !info[0u].IsBoolean())
+    if (info.Length() < 2 || !info[0u].IsNumber() || !info[1u].IsArray())
     {
-        Napi::TypeError::New(env, "Boolean expected as argument").ThrowAsJavaScriptException();
+        Napi::TypeError::New(env, "Number and Array expected as arguments").ThrowAsJavaScriptException();
         return;
     }
 
-    is_selection_passive_mode = info[0u].As<Napi::Boolean>().Value();
+    // Get fine-tuned list type from first argument
+    int listType = info[0u].As<Napi::Number>().Int32Value();
+    FineTunedListType ftlType = static_cast<FineTunedListType>(listType);
+
+    Napi::Array listArray = info[1u].As<Napi::Array>();
+
+    // Select the appropriate list based on type
+    std::vector<std::string> *targetList = nullptr;
+    switch (ftlType)
+    {
+    case FineTunedListType::ExcludeClipboardCursorDetect:
+        targetList = &ftl_exclude_clipboard_cursor_detect;
+        break;
+    case FineTunedListType::IncludeClipboardDelayRead:
+        targetList = &ftl_include_clipboard_delay_read;
+        break;
+    default:
+        Napi::TypeError::New(env, "Invalid FineTunedListType").ThrowAsJavaScriptException();
+        return;
+    }
+
+    // Use helper method to process the array
+    ProcessStringArrayToList(listArray, *targetList);
 }
 
 /**
@@ -819,6 +844,38 @@ bool SelectionHook::IsInFilterList(const std::wstring &programName, const std::v
     }
 
     return false;
+}
+
+/**
+ * Helper method to process string array and populate target list
+ * @param array The Napi::Array containing string values
+ * @param targetList The target vector to populate with lowercase UTF-8 strings
+ */
+void SelectionHook::ProcessStringArrayToList(const Napi::Array &array, std::vector<std::string> &targetList)
+{
+    uint32_t length = array.Length();
+
+    // Clear existing list
+    targetList.clear();
+
+    // Process each string in the array
+    for (uint32_t i = 0; i < length; i++)
+    {
+        Napi::Value value = array.Get(i);
+        if (value.IsString())
+        {
+            // Get the UTF-8 string
+            std::string programName = value.As<Napi::String>().Utf8Value();
+
+            // Convert to lowercase
+            std::transform(programName.begin(), programName.end(), programName.begin(),
+                           [](unsigned char c)
+                           { return std::tolower(c); });
+
+            // Add to the target list (store as UTF-8)
+            targetList.push_back(programName);
+        }
+    }
 }
 
 /**
@@ -1285,36 +1342,14 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
             // not beam, not arrow, not hand: invalid text selection cursor
             if (currentInstance->mouse_up_cursor != arrowCursor && currentInstance->mouse_up_cursor != handCursor)
             {
-                /**
-                 * Check if the current cursor is a system cursor.
-                 * If it's not a system cursor, we can't determine its type,
-                 * so we allow copy operations by default
-                 *
-                 * eg. Adobe Acrobat uses a custom cursor
-                 */
-                const int numOfRemainedSysCursors = 13;
-                LPCTSTR remainedSysCursors[numOfRemainedSysCursors] = {
-                    IDC_WAIT, IDC_CROSS, IDC_UPARROW, IDC_SIZE, IDC_ICON,
-                    IDC_SIZENWSE, IDC_SIZENESW, IDC_SIZEWE, IDC_SIZENS,
-                    IDC_SIZEALL, IDC_NO, IDC_APPSTARTING, IDC_HELP};
-
-                bool isRemainedSysCursor = false;
-                for (int i = 0; i < numOfRemainedSysCursors; i++)
+                // only apps in the list can use clipboard (exclude cursor detection)
+                if (IsInFilterList(programName, ftl_exclude_clipboard_cursor_detect))
                 {
-                    if (currentInstance->mouse_up_cursor == LoadCursor(NULL, remainedSysCursors[i]))
-                    {
-                        isRemainedSysCursor = true;
-                        break;
-                    }
-                }
-
-                if (isRemainedSysCursor)
-                {
-                    return false;
+                    return true;
                 }
                 else
                 {
-                    return true;
+                    return false;
                 }
             }
             /**
@@ -1899,7 +1934,6 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     // so we can skip the key check preprocessing
     if (!is_triggered_by_user)
     {
-
         bool isCtrlPressed = false;
         bool isCPressed = false;
         bool isXPressed = false;
@@ -1977,34 +2011,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         }
     }
 
-    // renew the clipboard sequence number
-    clipboard_sequence = GetClipboardSequenceNumber();
-
-    // Send MFC standard Copy command. (eg. XShell)
-    LRESULT result = SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(57634, 0), 0);
-    if (result > 0)
-    {
-        // Wait for clipboard update with polling
-        // max wait time about 5m * 10 = 50ms
-        for (int i = 0; i < 10; i++)
-        {
-            if (GetClipboardSequenceNumber() != clipboard_sequence)
-            {
-                // Try to read from clipboard directly
-                if (ReadClipboard(selectionInfo.text) && !selectionInfo.text.empty())
-                {
-                    return true;
-                }
-            }
-            Sleep(SLEEP_INTERVAL);
-        }
-    }
-
-    /**
-     * we have another way to get the text: Ctrl+Insert
-     * but it may not work for some apps not supporting it,
-     * and the shortcut may be used by other purposes
-     */
+    // The MFC ID_EDIT_COPY message will make JetBrains IDEs crash, so we abandon this method
 
     // Save existing clipboard content
     std::wstring existingContent;
@@ -2020,46 +2027,70 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         return false;
     }
 
+    bool isInDelayReadList = !selectionInfo.programName.empty() && IsInFilterList(selectionInfo.programName, ftl_include_clipboard_delay_read);
+
+    // if the program is in the delay read list, we only process Ctrl+C
+    if (!isInDelayReadList)
+    {
+        /**
+         * Ctrl+Insert
+         *
+         * First, we try to get the text with Ctrl+Insert
+         * It's a safer way than Ctrl+C
+         * but it may not work for some apps not supporting it,
+         * and the shortcut may be used by other purposes
+         */
+
+        // renew the clipboard sequence number
+        clipboard_sequence = GetClipboardSequenceNumber();
+
+        // Send Ctrl+Insert to copy selected text
+        SendCopyKey(CopyKeyType::CtrlInsert);
+
+        // Wait for clipboard update with polling
+        bool hasNewContent = false;
+        // max wait time about 5m * 20 = 100ms
+        for (int i = 0; i < 20; i++)
+        {
+            if (GetClipboardSequenceNumber() != clipboard_sequence)
+            {
+                hasNewContent = true;
+                break;
+            }
+            Sleep(SLEEP_INTERVAL);
+        }
+
+        // Handle case when clipboard update was detected
+        if (hasNewContent)
+        {
+            Sleep(10);
+
+            bool readSuccess = ReadClipboard(selectionInfo.text);
+
+            if (!existingContent.empty())
+                WriteClipboard(existingContent);
+
+            if (!readSuccess || selectionInfo.text.empty())
+                return false;
+
+            return true;
+        }
+    }
+
+    /**
+     * Ctrl+C
+     */
+
     // renew the clipboard sequence number
     clipboard_sequence = GetClipboardSequenceNumber();
 
-    // get ready to send Ctrl+C
-    bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-    if (!isCtrlPressing)
-    {
-        // Simulate Ctrl+C to copy selected text
-        INPUT inputs[4] = {};
-        inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].ki.wVk = VK_RCONTROL;
-        inputs[0].ki.dwFlags = 0; // Press down
-        inputs[1].type = INPUT_KEYBOARD;
-        inputs[1].ki.wVk = 'C';
-        inputs[1].ki.dwFlags = 0; // Press down
-        inputs[2].type = INPUT_KEYBOARD;
-        inputs[2].ki.wVk = 'C';
-        inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-        inputs[3].type = INPUT_KEYBOARD;
-        inputs[3].ki.wVk = VK_RCONTROL;
-        inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(4, inputs, sizeof(INPUT));
-    }
-    // Ctrl is pressing, we only send C
-    else
-    {
-        INPUT inputs[2] = {};
-        inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].ki.wVk = 'C';
-        inputs[0].ki.dwFlags = 0; // Press down
-        inputs[1].type = INPUT_KEYBOARD;
-        inputs[1].ki.wVk = 'C';
-        inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(2, inputs, sizeof(INPUT));
-    }
+    // Send Ctrl+C to copy selected text
+    SendCopyKey(CopyKeyType::CtrlC);
 
     // Wait for clipboard update with polling
     bool hasNewContent = false;
-    // max wait time about 5m * 30 = 150ms
-    for (int i = 0; i < 30; i++)
+    // max wait time about 5m * 36 = 180ms
+    for (int i = 0; i < 36; i++)
     {
         if (GetClipboardSequenceNumber() != clipboard_sequence)
         {
@@ -2078,8 +2109,13 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     }
 
     // some apps will change the clipboard content many times after the first time GetClipboardSequenceNumber() changed
-    // so we need to wait a little bit (eg. Adobe Acrobat)
-    Sleep(50);
+    // so we need to wait a little bit (eg. Adobe Acrobat) for those app in the delay read list
+    if (isInDelayReadList)
+    {
+        Sleep(135);
+    }
+
+    Sleep(10);
 
     // Read the new clipboard content
     bool readSuccess = ReadClipboard(selectionInfo.text);
@@ -2092,6 +2128,58 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         return false;
 
     return true;
+}
+
+/**
+ * Send copy key combination based on type
+ * @param type The type of copy key combination to send (CtrlInsert or CtrlC)
+ */
+void SelectionHook::SendCopyKey(CopyKeyType type)
+{
+    WORD keyCode = (type == CopyKeyType::CtrlInsert) ? VK_INSERT : 'C';
+
+    bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    if (!isCtrlPressing)
+    {
+        // Simulate Ctrl+Insert or Ctrl+C to copy selected text
+        INPUT inputs[4] = {};
+        // Press down
+        inputs[0].type = INPUT_KEYBOARD;
+        inputs[0].ki.wVk = VK_RCONTROL;
+        inputs[0].ki.dwFlags = 0;
+
+        inputs[1].type = INPUT_KEYBOARD;
+        inputs[1].ki.wVk = keyCode;
+        inputs[1].ki.dwFlags = 0;
+
+        // Release
+        inputs[2].type = INPUT_KEYBOARD;
+        inputs[2].ki.wVk = keyCode;
+        inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+
+        inputs[3].type = INPUT_KEYBOARD;
+        inputs[3].ki.wVk = VK_RCONTROL;
+        inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+
+        SendInput(4, inputs, sizeof(INPUT));
+    }
+    // Ctrl is pressing, we only send Insert or C
+    else
+    {
+        INPUT inputs[2] = {};
+
+        // Press down
+        inputs[0].type = INPUT_KEYBOARD;
+        inputs[0].ki.wVk = keyCode;
+        inputs[0].ki.dwFlags = 0;
+
+        // Release
+        inputs[1].type = INPUT_KEYBOARD;
+        inputs[1].ki.wVk = keyCode;
+        inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+
+        SendInput(2, inputs, sizeof(INPUT));
+    }
 }
 
 /**
