@@ -1357,6 +1357,8 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
              *
              * uia_control_type exceptions (when the cursor is arrow or hand):
              *
+             * https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids
+             *
              * chrome devtools: UIA_GroupControlTypeId (50026)
              * chrome pages: UIA_DocumentControlTypeId (50030), UIA_TextControlTypeId (50020)
              */
@@ -2136,50 +2138,62 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
  */
 void SelectionHook::SendCopyKey(CopyKeyType type)
 {
+
+    bool isCPressing = (GetAsyncKeyState('C') & 0x8000) != 0;
+    bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool isAltPressing = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+
+    // if Ctrl+C is pressing, means user is doing copy action, we will not send anything
+    if (isCtrlPressing && isCPressing)
+        return;
+
     WORD keyCode = (type == CopyKeyType::CtrlInsert) ? VK_INSERT : 'C';
 
-    bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    std::vector<INPUT> inputs;
+    INPUT input = {};
+
+    // if Alt is pressing, we need to release it first
+    if (isAltPressing)
+    {
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = VK_MENU;
+        input.ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs.push_back(input);
+    }
+
+    // The following Ctrl+Insert or Ctrl+C key combinations are symmetric, meaning press and release events come in pairs
+
+    // Press the Ctrl key
     if (!isCtrlPressing)
     {
-        // Simulate Ctrl+Insert or Ctrl+C to copy selected text
-        INPUT inputs[4] = {};
-        // Press down
-        inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].ki.wVk = VK_RCONTROL;
-        inputs[0].ki.dwFlags = 0;
-
-        inputs[1].type = INPUT_KEYBOARD;
-        inputs[1].ki.wVk = keyCode;
-        inputs[1].ki.dwFlags = 0;
-
-        // Release
-        inputs[2].type = INPUT_KEYBOARD;
-        inputs[2].ki.wVk = keyCode;
-        inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-
-        inputs[3].type = INPUT_KEYBOARD;
-        inputs[3].ki.wVk = VK_RCONTROL;
-        inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-
-        SendInput(4, inputs, sizeof(INPUT));
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = VK_RCONTROL;
+        input.ki.dwFlags = 0;
+        inputs.push_back(input);
     }
-    // Ctrl is pressing, we only send Insert or C
-    else
+
+    // Press the key (Insert or C)
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = keyCode;
+    input.ki.dwFlags = 0;
+    inputs.push_back(input);
+
+    // Release the key (Insert or C)
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = keyCode;
+    input.ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs.push_back(input);
+
+    // Release the Ctrl key
+    if (!isCtrlPressing)
     {
-        INPUT inputs[2] = {};
-
-        // Press down
-        inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].ki.wVk = keyCode;
-        inputs[0].ki.dwFlags = 0;
-
-        // Release
-        inputs[1].type = INPUT_KEYBOARD;
-        inputs[1].ki.wVk = keyCode;
-        inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
-
-        SendInput(2, inputs, sizeof(INPUT));
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = VK_RCONTROL;
+        input.ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs.push_back(input);
     }
+
+    SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
 }
 
 /**
