@@ -1941,7 +1941,6 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         bool isXPressed = false;
         bool isVPressed = false;
         bool isCtrlPressing = false;
-        bool isShiftPressing = false;
         bool isCPressing = false;
         bool isXPressing = false;
         bool isVPressing = false;
@@ -1962,13 +1961,11 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
             }
 
             isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-            isShiftPressing = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-
             isCPressing = (GetAsyncKeyState('C') & 0x8000) != 0;
             isXPressing = (GetAsyncKeyState('X') & 0x8000) != 0;
             isVPressing = (GetAsyncKeyState('V') & 0x8000) != 0;
 
-            if (!isCtrlPressing && !isShiftPressing && !isCPressing && !isXPressing && !isVPressing)
+            if (!isCtrlPressing && !isCPressing && !isXPressing && !isVPressing)
             {
                 break;
             }
@@ -2001,13 +1998,6 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
 
         // if it's a user copy behavior, we will do nothing
         if (isCtrlPressed && (isCPressed || isXPressed || isVPressed))
-        {
-            return false;
-        }
-
-        // if shift is still pressing, we will not process
-        // because ctrl+shift+c is a common shortcut for other purposes
-        if (isShiftPressing)
         {
             return false;
         }
@@ -2142,6 +2132,7 @@ void SelectionHook::SendCopyKey(CopyKeyType type)
     bool isCPressing = (GetAsyncKeyState('C') & 0x8000) != 0;
     bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
     bool isAltPressing = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    bool isShiftPressing = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 
     // if Ctrl+C is pressing, means user is doing copy action, we will not send anything
     if (isCtrlPressing && isCPressing)
@@ -2157,6 +2148,14 @@ void SelectionHook::SendCopyKey(CopyKeyType type)
     {
         input.type = INPUT_KEYBOARD;
         input.ki.wVk = VK_MENU;
+        input.ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs.push_back(input);
+    }
+
+    if (isShiftPressing)
+    {
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = VK_SHIFT;
         input.ki.dwFlags = KEYEVENTF_KEYUP;
         inputs.push_back(input);
     }
