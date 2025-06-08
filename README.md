@@ -370,3 +370,9 @@ const hook: SelectionHookInstance = new SelectionHook();
 ```
 
 See [`index.d.ts`](https://github.com/0xfullex/selection-hook/blob/main/index.d.ts) for details.
+
+## Used By
+
+This project is used by:
+
+- **[Cherry Studio](https://github.com/CherryHQ/cherry-studio)**: A full-featured AI client, with Selection Assistant that conveniently enables AI-powered translation, explanation, summarization, and more for selected text.
