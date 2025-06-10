@@ -239,6 +239,7 @@ class SelectionHook : public Napi::ObjectWrap<SelectionHook>
     bool IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList);
     void ProcessStringArrayToList(const Napi::Array &array, std::vector<std::string> &targetList);
     void SendCopyKey(CopyKeyType type);  // Keyboard input helper method
+    bool ShouldKeyInterruptViaClipboard();
 
     // Mouse and keyboard event handling methods
     static DWORD WINAPI MouseKeyboardHookThreadProc(LPVOID lpParam);
@@ -1918,6 +1919,10 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     // so we can skip the key check preprocessing
     if (!is_triggered_by_user)
     {
+        // we will do the key check preprocessing
+        // because user may press some keys but not intent to copy text
+        // so we wait max about 200ms to check this
+
         bool isCtrlPressed = false;
         bool isCPressed = false;
         bool isXPressed = false;
@@ -1932,6 +1937,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         while (checkCount < maxChecks)
         {
             // Check if clipboard sequence number has changed since mouse down
+            // if it's changed, it means user has copied something, we can read it directly
             if (GetClipboardSequenceNumber() != clipboard_sequence)
             {
                 // Try to read from clipboard directly
@@ -1947,6 +1953,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
             isXPressing = (GetAsyncKeyState('X') & 0x8000) != 0;
             isVPressing = (GetAsyncKeyState('V') & 0x8000) != 0;
 
+            // if no key is pressing, we can break to go on
             if (!isCtrlPressing && !isCPressing && !isXPressing && !isVPressing)
             {
                 break;
@@ -1972,7 +1979,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
             Sleep(40);  // Small delay between checks
         }
 
-        // wait for user copy timeout
+        // wait for user copy timeout, still some key(Ctrl, C, X, V) is pressing
         if (checkCount >= maxChecks)
         {
             return false;
@@ -2007,6 +2014,11 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     // if the program is in the delay read list, we only process Ctrl+C
     if (!isInDelayReadList)
     {
+        if (ShouldKeyInterruptViaClipboard())
+        {
+            return false;
+        }
+
         /**
          * Ctrl+Insert
          *
@@ -2052,6 +2064,11 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         }
     }
 
+    if (ShouldKeyInterruptViaClipboard())
+    {
+        return false;
+    }
+
     /**
      * Ctrl+C
      */
@@ -2089,8 +2106,12 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     {
         Sleep(135);
     }
-
     Sleep(10);
+
+    if (ShouldKeyInterruptViaClipboard())
+    {
+        return false;
+    }
 
     // Read the new clipboard content
     bool readSuccess = ReadClipboard(selectionInfo.text);
@@ -2176,6 +2197,22 @@ void SelectionHook::SendCopyKey(CopyKeyType type)
     }
 
     SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
+}
+
+/**
+ * Check if some key is interrupted the copy process via clipboard
+ * @return true if the key is interrupted via clipboard, false otherwise
+ */
+bool SelectionHook::ShouldKeyInterruptViaClipboard()
+{
+    // if it's not triggered by user, and ctrl is pressing, it means user is doing other action, we will not process
+    // we will do the check every time when we have to copy text
+    bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    if (!is_triggered_by_user && isCtrlPressing)
+    {
+        return true;
+    }
+    return false;
 }
 
 /**
