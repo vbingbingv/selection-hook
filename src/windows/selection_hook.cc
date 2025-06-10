@@ -27,25 +27,25 @@
  */
 #define WIN32_LEAN_AND_MEAN 1
 
+#include <ShellScalingApi.h>  // For SetProcessDpiAwareness
+#include <UIAutomation.h>     // For UI Automation
 #include <napi.h>
+#include <oleacc.h>    // For IAccessible
+#include <shellapi.h>  // For SHQueryUserNotificationState
 #include <windows.h>
-#include <oleacc.h>          // For IAccessible
-#include <UIAutomation.h>    // For UI Automation
-#include <ShellScalingApi.h> // For SetProcessDpiAwareness
-#include <shellapi.h>        // For SHQueryUserNotificationState
 
 #include <atomic>
 #include <string>
 #include <thread>
 
+#include "lib/clipboard.h"
 #include "lib/string_pool.h"
 #include "lib/utils.h"
-#include "lib/clipboard.h"
 
-#pragma comment(lib, "Oleacc.lib")           // For IAccessible
-#pragma comment(lib, "UIAutomationCore.lib") // For UI Automation
-#pragma comment(lib, "Shcore.lib")           // For SetProcessDpiAwareness
-#pragma comment(lib, "Shell32.lib")          // For SHQueryUserNotificationState
+#pragma comment(lib, "Oleacc.lib")            // For IAccessible
+#pragma comment(lib, "UIAutomationCore.lib")  // For UI Automation
+#pragma comment(lib, "Shcore.lib")            // For SetProcessDpiAwareness
+#pragma comment(lib, "Shell32.lib")           // For SHQueryUserNotificationState
 
 // UI Automation constants (if not defined)
 #ifndef UIA_IsSelectionActivePropertyId
@@ -54,7 +54,7 @@
 
 // Define EM_GETSELTEXT if not defined
 #ifndef EM_GETSELTEXT
-#define EM_GETSELTEXT (WM_USER + 70) // This is the standard value for Rich Edit controls
+#define EM_GETSELTEXT (WM_USER + 70)  // This is the standard value for Rich Edit controls
 #endif
 
 // Mouse&Keyboard hook constants
@@ -91,11 +91,11 @@ enum class SelectionMethod
  */
 enum class SelectionPositionLevel
 {
-    None = 0,        // No position information available
-    MouseSingle = 1, // Only current mouse cursor position is known
-    MouseDual = 2,   // Mouse start and end positions are known
-    Full = 3,        // selection first paragraph's start and last paragraph's end coordinates are known
-    Detailed = 4     // Detailed selection coordinates including all needed corner points
+    None = 0,         // No position information available
+    MouseSingle = 1,  // Only current mouse cursor position is known
+    MouseDual = 2,    // Mouse start and end positions are known
+    Full = 3,         // selection first paragraph's start and last paragraph's end coordinates are known
+    Detailed = 4      // Detailed selection coordinates including all needed corner points
 };
 
 // Mouse button enum
@@ -113,9 +113,9 @@ enum class MouseButton
 
 enum class FilterMode
 {
-    Default = 0,     // trigger anyway
-    IncludeList = 1, // only trigger when the program name is in the include list
-    ExcludeList = 2  // only trigger when the program name is not in the exclude list
+    Default = 0,      // trigger anyway
+    IncludeList = 1,  // only trigger when the program name is in the include list
+    ExcludeList = 2   // only trigger when the program name is not in the exclude list
 };
 
 enum class FineTunedListType
@@ -136,16 +136,16 @@ enum class CopyKeyType
  */
 struct TextSelectionInfo
 {
-    std::wstring text;        ///< Selected text content
-    std::wstring programName; ///< program name that triggered the selection
+    std::wstring text;         ///< Selected text content
+    std::wstring programName;  ///< program name that triggered the selection
 
-    POINT startTop;    ///< First paragraph left-top (screen coordinates)
-    POINT startBottom; ///< First paragraph left-bottom (screen coordinates)
-    POINT endTop;      ///< Last paragraph right-top (screen coordinates)
-    POINT endBottom;   ///< Last paragraph right-bottom (screen coordinates)
+    POINT startTop;     ///< First paragraph left-top (screen coordinates)
+    POINT startBottom;  ///< First paragraph left-bottom (screen coordinates)
+    POINT endTop;       ///< Last paragraph right-top (screen coordinates)
+    POINT endBottom;    ///< Last paragraph right-bottom (screen coordinates)
 
-    POINT mousePosStart; ///< Current mouse position (screen coordinates)
-    POINT mousePosEnd;   ///< Mouse down position (screen coordinates)
+    POINT mousePosStart;  ///< Current mouse position (screen coordinates)
+    POINT mousePosEnd;    ///< Mouse down position (screen coordinates)
 
     SelectionMethod method;
     SelectionPositionLevel posLevel;
@@ -179,10 +179,10 @@ struct TextSelectionInfo
  */
 struct MouseEventContext
 {
-    WPARAM event;    ///< Windows message identifier (e.g. WM_LBUTTONDOWN)
-    LONG ptX;        ///< X coordinate of mouse position
-    LONG ptY;        ///< Y coordinate of mouse position
-    DWORD mouseData; ///< Additional mouse event data
+    WPARAM event;     ///< Windows message identifier (e.g. WM_LBUTTONDOWN)
+    LONG ptX;         ///< X coordinate of mouse position
+    LONG ptY;         ///< Y coordinate of mouse position
+    DWORD mouseData;  ///< Additional mouse event data
 };
 
 /**
@@ -190,10 +190,10 @@ struct MouseEventContext
  */
 struct KeyboardEventContext
 {
-    WPARAM event;   ///< Windows message identifier (e.g. WM_KEYDOWN)
-    DWORD vkCode;   ///< Virtual key code
-    DWORD scanCode; ///< Hardware scan code
-    DWORD flags;    ///< Additional flags for the key event
+    WPARAM event;    ///< Windows message identifier (e.g. WM_KEYDOWN)
+    DWORD vkCode;    ///< Virtual key code
+    DWORD scanCode;  ///< Hardware scan code
+    DWORD flags;     ///< Additional flags for the key event
 };
 
 //=============================================================================
@@ -201,12 +201,12 @@ struct KeyboardEventContext
 //=============================================================================
 class SelectionHook : public Napi::ObjectWrap<SelectionHook>
 {
-public:
+  public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     SelectionHook(const Napi::CallbackInfo &info);
     ~SelectionHook();
 
-private:
+  private:
     static Napi::FunctionReference constructor;
 
     // Node.js interface methods
@@ -230,7 +230,7 @@ private:
     bool GetTextViaAccessible(HWND hwnd, TextSelectionInfo &selectionInfo);
     bool GetTextViaFocusedControl(HWND hwnd, TextSelectionInfo &selectionInfo);
     bool GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionInfo);
-    bool ShouldProcessGetSelection(); // check if we should get text based on system state
+    bool ShouldProcessGetSelection();  // check if we should get text based on system state
     bool ShouldProcessViaClipboard(HWND hwnd, std::wstring &programName);
     bool SetTextRangeCoordinates(IUIAutomationTextRange *pRange, TextSelectionInfo &selectionInfo);
     Napi::Object CreateSelectionResultObject(Napi::Env env, const TextSelectionInfo &selectionInfo);
@@ -238,7 +238,7 @@ private:
     // Helper method for processing string arrays
     bool IsInFilterList(const std::wstring &programName, const std::vector<std::string> &filterList);
     void ProcessStringArrayToList(const Napi::Array &array, std::vector<std::string> &targetList);
-    void SendCopyKey(CopyKeyType type); // Keyboard input helper method
+    void SendCopyKey(CopyKeyType type);  // Keyboard input helper method
 
     // Mouse and keyboard event handling methods
     static DWORD WINAPI MouseKeyboardHookThreadProc(LPVOID lpParam);
@@ -247,7 +247,7 @@ private:
     static void ProcessMouseEvent(Napi::Env env, Napi::Function function, MouseEventContext *mouseEvent);
     static void ProcessKeyboardEvent(Napi::Env env, Napi::Function function, KeyboardEventContext *keyboardEvent);
 
-    bool com_initialized_by_us = false; // Flag indicating whether COM was initialized by this module
+    bool com_initialized_by_us = false;  // Flag indicating whether COM was initialized by this module
 
     // Thread communication
     Napi::ThreadSafeFunction tsfn;
@@ -276,7 +276,7 @@ private:
 
     // passive mode: only trigger when user call GetSelectionText
     bool is_selection_passive_mode = false;
-    bool is_enabled_clipboard = true; // Enable by default
+    bool is_enabled_clipboard = true;  // Enable by default
     // Store clipboard sequence number when mouse down
     DWORD clipboard_sequence = 0;
 
@@ -307,8 +307,7 @@ static SelectionHook *currentInstance = nullptr;
 /**
  * Constructor - initializes COM and UI Automation
  */
-SelectionHook::SelectionHook(const Napi::CallbackInfo &info)
-    : Napi::ObjectWrap<SelectionHook>(info)
+SelectionHook::SelectionHook(const Napi::CallbackInfo &info) : Napi::ObjectWrap<SelectionHook>(info)
 {
     Napi::Env env = info.Env();
     Napi::HandleScope scope(env);
@@ -346,8 +345,8 @@ SelectionHook::SelectionHook(const Napi::CallbackInfo &info)
     }
 
     // Initialize UI Automation
-    hr = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER,
-                          __uuidof(IUIAutomation), (void **)&pUIAutomation);
+    hr = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
+                          (void **)&pUIAutomation);
     if (FAILED(hr))
     {
         Napi::Error::New(env, "Failed to initialize UI Automation").ThrowAsJavaScriptException();
@@ -429,7 +428,20 @@ Napi::Object SelectionHook::Init(Napi::Env env, Napi::Object exports)
     Napi::HandleScope scope(env);
 
     // Define class with JavaScript-accessible methods
-    Napi::Function func = DefineClass(env, "TextSelectionHook", {InstanceMethod("start", &SelectionHook::Start), InstanceMethod("stop", &SelectionHook::Stop), InstanceMethod("enableMouseMoveEvent", &SelectionHook::EnableMouseMoveEvent), InstanceMethod("disableMouseMoveEvent", &SelectionHook::DisableMouseMoveEvent), InstanceMethod("enableClipboard", &SelectionHook::EnableClipboard), InstanceMethod("disableClipboard", &SelectionHook::DisableClipboard), InstanceMethod("setClipboardMode", &SelectionHook::SetClipboardMode), InstanceMethod("setGlobalFilterMode", &SelectionHook::SetGlobalFilterMode), InstanceMethod("setFineTunedList", &SelectionHook::SetFineTunedList), InstanceMethod("setSelectionPassiveMode", &SelectionHook::SetSelectionPassiveMode), InstanceMethod("getCurrentSelection", &SelectionHook::GetCurrentSelection), InstanceMethod("writeToClipboard", &SelectionHook::WriteToClipboard), InstanceMethod("readFromClipboard", &SelectionHook::ReadFromClipboard)});
+    Napi::Function func =
+        DefineClass(env, "TextSelectionHook",
+                    {InstanceMethod("start", &SelectionHook::Start), InstanceMethod("stop", &SelectionHook::Stop),
+                     InstanceMethod("enableMouseMoveEvent", &SelectionHook::EnableMouseMoveEvent),
+                     InstanceMethod("disableMouseMoveEvent", &SelectionHook::DisableMouseMoveEvent),
+                     InstanceMethod("enableClipboard", &SelectionHook::EnableClipboard),
+                     InstanceMethod("disableClipboard", &SelectionHook::DisableClipboard),
+                     InstanceMethod("setClipboardMode", &SelectionHook::SetClipboardMode),
+                     InstanceMethod("setGlobalFilterMode", &SelectionHook::SetGlobalFilterMode),
+                     InstanceMethod("setFineTunedList", &SelectionHook::SetFineTunedList),
+                     InstanceMethod("setSelectionPassiveMode", &SelectionHook::SetSelectionPassiveMode),
+                     InstanceMethod("getCurrentSelection", &SelectionHook::GetCurrentSelection),
+                     InstanceMethod("writeToClipboard", &SelectionHook::WriteToClipboard),
+                     InstanceMethod("readFromClipboard", &SelectionHook::ReadFromClipboard)});
 
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
@@ -462,56 +474,31 @@ void SelectionHook::Start(const Napi::CallbackInfo &info)
     // Create thread-safe function from JavaScript callback
     Napi::Function callback = info[0u].As<Napi::Function>();
 
-    tsfn = Napi::ThreadSafeFunction::New(
-        env,
-        callback,
-        "TextSelectionCallback",
-        0,
-        1,
-        [this](Napi::Env)
-        {
-            running = false;
-        });
+    tsfn = Napi::ThreadSafeFunction::New(env, callback, "TextSelectionCallback", 0, 1,
+                                         [this](Napi::Env) { running = false; });
 
     // Set up mouse and keyboard hooks
     if (!mouse_keyboard_running)
     {
         // Create thread-safe function for mouse events
-        mouse_tsfn = Napi::ThreadSafeFunction::New(
-            env,
-            callback, // Same callback as text selection
-            "MouseEventCallback",
-            DEFAULT_MOUSE_EVENT_QUEUE_SIZE,
-            1,
-            [this](Napi::Env)
-            {
-                mouse_keyboard_running = false;
-            });
+        mouse_tsfn = Napi::ThreadSafeFunction::New(env,
+                                                   callback,  // Same callback as text selection
+                                                   "MouseEventCallback", DEFAULT_MOUSE_EVENT_QUEUE_SIZE, 1,
+                                                   [this](Napi::Env) { mouse_keyboard_running = false; });
 
         // Create thread-safe function for keyboard events
-        keyboard_tsfn = Napi::ThreadSafeFunction::New(
-            env,
-            callback, // Same callback as text selection
-            "KeyboardEventCallback",
-            DEFAULT_KEYBOARD_EVENT_QUEUE_SIZE,
-            1,
-            [this](Napi::Env)
-            {
-                mouse_keyboard_running = false;
-            });
+        keyboard_tsfn = Napi::ThreadSafeFunction::New(env,
+                                                      callback,  // Same callback as text selection
+                                                      "KeyboardEventCallback", DEFAULT_KEYBOARD_EVENT_QUEUE_SIZE, 1,
+                                                      [this](Napi::Env) { mouse_keyboard_running = false; });
 
         // Set running flag
         mouse_keyboard_running = true;
     }
 
     // Create Windows thread for mouse/keyboard hooks
-    mouse_keyboard_hook_thread = CreateThread(
-        NULL,
-        0,
-        MouseKeyboardHookThreadProc,
-        this,
-        CREATE_SUSPENDED,
-        &mouse_keyboard_thread_id);
+    mouse_keyboard_hook_thread =
+        CreateThread(NULL, 0, MouseKeyboardHookThreadProc, this, CREATE_SUSPENDED, &mouse_keyboard_thread_id);
 
     if (!mouse_keyboard_hook_thread)
     {
@@ -737,15 +724,15 @@ void SelectionHook::SetFineTunedList(const Napi::CallbackInfo &info)
     std::vector<std::string> *targetList = nullptr;
     switch (ftlType)
     {
-    case FineTunedListType::ExcludeClipboardCursorDetect:
-        targetList = &ftl_exclude_clipboard_cursor_detect;
-        break;
-    case FineTunedListType::IncludeClipboardDelayRead:
-        targetList = &ftl_include_clipboard_delay_read;
-        break;
-    default:
-        Napi::TypeError::New(env, "Invalid FineTunedListType").ThrowAsJavaScriptException();
-        return;
+        case FineTunedListType::ExcludeClipboardCursorDetect:
+            targetList = &ftl_exclude_clipboard_cursor_detect;
+            break;
+        case FineTunedListType::IncludeClipboardDelayRead:
+            targetList = &ftl_include_clipboard_delay_read;
+            break;
+        default:
+            Napi::TypeError::New(env, "Invalid FineTunedListType").ThrowAsJavaScriptException();
+            return;
     }
 
     // Use helper method to process the array
@@ -828,8 +815,7 @@ bool SelectionHook::IsInFilterList(const std::wstring &programName, const std::v
 
     // Convert program name to lowercase UTF-8 for case-insensitive comparison
     std::wstring lowerProgramName = programName;
-    std::transform(lowerProgramName.begin(), lowerProgramName.end(),
-                   lowerProgramName.begin(), towlower);
+    std::transform(lowerProgramName.begin(), lowerProgramName.end(), lowerProgramName.begin(), towlower);
 
     // Convert to UTF-8 for comparison with our list
     std::string utf8ProgramName = StringPool::WideToUtf8(lowerProgramName);
@@ -869,8 +855,7 @@ void SelectionHook::ProcessStringArrayToList(const Napi::Array &array, std::vect
 
             // Convert to lowercase
             std::transform(programName.begin(), programName.end(), programName.begin(),
-                           [](unsigned char c)
-                           { return std::tolower(c); });
+                           [](unsigned char c) { return std::tolower(c); });
 
             // Add to the target list (store as UTF-8)
             targetList.push_back(programName);
@@ -895,11 +880,11 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
 
     delete pMouseEvent;
 
-    static POINT lastLastMouseUpPos = {0, 0}; // Last last mouse up position
-    static POINT lastMouseUpPos = {0, 0};     // Last mouse up position
-    static DWORD lastMouseUpTime = 0;         // Last mouse up time
-    static POINT lastMouseDownPos = {0, 0};   // Last mouse down position
-    static DWORD lastMouseDownTime = 0;       // Last mouse down time
+    static POINT lastLastMouseUpPos = {0, 0};  // Last last mouse up position
+    static POINT lastMouseUpPos = {0, 0};      // Last mouse up position
+    static DWORD lastMouseUpTime = 0;          // Last mouse up time
+    static POINT lastMouseDownPos = {0, 0};    // Last mouse down position
+    static DWORD lastMouseDownTime = 0;        // Last mouse down time
 
     static bool isLastValidClick = false;
 
@@ -907,7 +892,7 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
     static RECT lastWindowRect = {0};
 
     bool shouldDetectSelection = false;
-    auto detectionType = SelectionDetectType::None; // 0=not set, 1=drag, 2=double click
+    auto detectionType = SelectionDetectType::None;  // 0=not set, 1=drag, 2=double click
     auto mouseType = "";
     auto mouseButton = MouseButton::None;
     auto mouseFlag = 0;
@@ -915,150 +900,151 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
     // Process different mouse events
     switch (mEvent)
     {
-    case WM_MOUSEMOVE:
-        mouseType = "mouse-move";
-        break;
+        case WM_MOUSEMOVE:
+            mouseType = "mouse-move";
+            break;
 
-    case WM_LBUTTONDOWN:
-    {
-        mouseType = "mouse-down";
-        mouseButton = MouseButton::Left;
-
-        lastMouseDownTime = GetTickCount();
-        lastMouseDownPos = currentPos;
-
-        lastWindowHandler = GetWindowUnderMouse();
-
-        if (lastWindowHandler)
+        case WM_LBUTTONDOWN:
         {
-            GetWindowRect(lastWindowHandler, &lastWindowRect);
+            mouseType = "mouse-down";
+            mouseButton = MouseButton::Left;
+
+            lastMouseDownTime = GetTickCount();
+            lastMouseDownPos = currentPos;
+
+            lastWindowHandler = GetWindowUnderMouse();
+
+            if (lastWindowHandler)
+            {
+                GetWindowRect(lastWindowHandler, &lastWindowRect);
+            }
+
+            // Store clipboard sequence number when mouse down
+            currentInstance->clipboard_sequence = GetClipboardSequenceNumber();
+
+            break;
         }
-
-        // Store clipboard sequence number when mouse down
-        currentInstance->clipboard_sequence = GetClipboardSequenceNumber();
-
-        break;
-    }
-    case WM_LBUTTONUP:
-    {
-        mouseType = "mouse-up";
-        mouseButton = MouseButton::Left;
-
-        DWORD currentTime = GetTickCount();
-
-        if (!currentInstance->is_selection_passive_mode)
+        case WM_LBUTTONUP:
         {
-            // Calculate distance between current position and mouse down position
-            int dx = currentPos.x - lastMouseDownPos.x;
-            int dy = currentPos.y - lastMouseDownPos.y;
-            double distance = sqrt(dx * dx + dy * dy);
+            mouseType = "mouse-up";
+            mouseButton = MouseButton::Left;
 
-            bool isCurrentValidClick = (currentTime - lastMouseDownTime) <= DOUBLE_CLICK_TIME_MS;
+            DWORD currentTime = GetTickCount();
 
-            if ((currentTime - lastMouseDownTime) > MAX_DRAG_TIME_MS)
+            if (!currentInstance->is_selection_passive_mode)
             {
-                shouldDetectSelection = false;
-            }
-            // Check for drag selection
-            else if (distance >= MIN_DRAG_DISTANCE)
-            {
-                HWND hwnd = GetWindowUnderMouse();
-
-                if (hwnd && hwnd == lastWindowHandler)
-                {
-                    RECT currentWindowRect;
-                    GetWindowRect(hwnd, &currentWindowRect);
-
-                    if (!HasWindowMoved(currentWindowRect, lastWindowRect))
-                    {
-                        shouldDetectSelection = true;
-                        detectionType = SelectionDetectType::Drag;
-                    }
-                }
-            }
-            // Check for double-click selection
-            else if (isLastValidClick && isCurrentValidClick && distance <= DOUBLE_CLICK_MAX_DISTANCE)
-            {
-                int dx = currentPos.x - lastMouseUpPos.x;
-                int dy = currentPos.y - lastMouseUpPos.y;
+                // Calculate distance between current position and mouse down position
+                int dx = currentPos.x - lastMouseDownPos.x;
+                int dy = currentPos.y - lastMouseDownPos.y;
                 double distance = sqrt(dx * dx + dy * dy);
 
-                if (distance <= DOUBLE_CLICK_MAX_DISTANCE && (lastMouseDownTime - lastMouseUpTime) <= DOUBLE_CLICK_TIME_MS)
+                bool isCurrentValidClick = (currentTime - lastMouseDownTime) <= DOUBLE_CLICK_TIME_MS;
+
+                if ((currentTime - lastMouseDownTime) > MAX_DRAG_TIME_MS)
                 {
-                    shouldDetectSelection = true;
-                    detectionType = SelectionDetectType::DoubleClick;
+                    shouldDetectSelection = false;
                 }
-            }
-
-            // Check if shift key is pressed when mouse up, it's a way to select text
-            if (!shouldDetectSelection)
-            {
-                bool isShiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-                bool isCtrlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-                bool isAltPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-                if (isShiftPressed && !isCtrlPressed && !isAltPressed)
+                // Check for drag selection
+                else if (distance >= MIN_DRAG_DISTANCE)
                 {
-                    shouldDetectSelection = true;
-                    detectionType = SelectionDetectType::ShiftClick;
+                    HWND hwnd = GetWindowUnderMouse();
+
+                    if (hwnd && hwnd == lastWindowHandler)
+                    {
+                        RECT currentWindowRect;
+                        GetWindowRect(hwnd, &currentWindowRect);
+
+                        if (!HasWindowMoved(currentWindowRect, lastWindowRect))
+                        {
+                            shouldDetectSelection = true;
+                            detectionType = SelectionDetectType::Drag;
+                        }
+                    }
                 }
+                // Check for double-click selection
+                else if (isLastValidClick && isCurrentValidClick && distance <= DOUBLE_CLICK_MAX_DISTANCE)
+                {
+                    int dx = currentPos.x - lastMouseUpPos.x;
+                    int dy = currentPos.y - lastMouseUpPos.y;
+                    double distance = sqrt(dx * dx + dy * dy);
+
+                    if (distance <= DOUBLE_CLICK_MAX_DISTANCE &&
+                        (lastMouseDownTime - lastMouseUpTime) <= DOUBLE_CLICK_TIME_MS)
+                    {
+                        shouldDetectSelection = true;
+                        detectionType = SelectionDetectType::DoubleClick;
+                    }
+                }
+
+                // Check if shift key is pressed when mouse up, it's a way to select text
+                if (!shouldDetectSelection)
+                {
+                    bool isShiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                    bool isCtrlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+                    bool isAltPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+                    if (isShiftPressed && !isCtrlPressed && !isAltPressed)
+                    {
+                        shouldDetectSelection = true;
+                        detectionType = SelectionDetectType::ShiftClick;
+                    }
+                }
+
+                if (shouldDetectSelection && currentInstance->is_enabled_clipboard)
+                {
+                    CURSORINFO ci = {sizeof(CURSORINFO)};
+                    GetCursorInfo(&ci);
+                    currentInstance->mouse_up_cursor = ci.hCursor;
+                }
+
+                isLastValidClick = isCurrentValidClick;
             }
 
-            if (shouldDetectSelection && currentInstance->is_enabled_clipboard)
+            lastLastMouseUpPos = lastMouseUpPos;
+
+            lastMouseUpTime = currentTime;
+            lastMouseUpPos = currentPos;
+            break;
+        }
+
+        case WM_RBUTTONDOWN:
+            mouseType = "mouse-down";
+            mouseButton = MouseButton::Right;
+            break;
+
+        case WM_RBUTTONUP:
+            mouseType = "mouse-up";
+            mouseButton = MouseButton::Right;
+            break;
+
+        case WM_MBUTTONUP:
+            mouseType = "mouse-up";
+            mouseButton = MouseButton::Middle;
+            break;
+
+        case WM_MBUTTONDOWN:
+            mouseType = "mouse-down";
+            mouseButton = MouseButton::Middle;
+            break;
+
+        case WM_XBUTTONUP:
+        case WM_XBUTTONDOWN:
+            mouseType = mEvent == WM_XBUTTONUP ? "mouse-up" : "mouse-down";
+            if (HIWORD(nMouseData) == XBUTTON1)
             {
-                CURSORINFO ci = {sizeof(CURSORINFO)};
-                GetCursorInfo(&ci);
-                currentInstance->mouse_up_cursor = ci.hCursor;
+                mouseButton = MouseButton::Back;
             }
+            else if (HIWORD(nMouseData) == XBUTTON2)
+            {
+                mouseButton = MouseButton::Forward;
+            }
+            break;
 
-            isLastValidClick = isCurrentValidClick;
-        }
-
-        lastLastMouseUpPos = lastMouseUpPos;
-
-        lastMouseUpTime = currentTime;
-        lastMouseUpPos = currentPos;
-        break;
-    }
-
-    case WM_RBUTTONDOWN:
-        mouseType = "mouse-down";
-        mouseButton = MouseButton::Right;
-        break;
-
-    case WM_RBUTTONUP:
-        mouseType = "mouse-up";
-        mouseButton = MouseButton::Right;
-        break;
-
-    case WM_MBUTTONUP:
-        mouseType = "mouse-up";
-        mouseButton = MouseButton::Middle;
-        break;
-
-    case WM_MBUTTONDOWN:
-        mouseType = "mouse-down";
-        mouseButton = MouseButton::Middle;
-        break;
-
-    case WM_XBUTTONUP:
-    case WM_XBUTTONDOWN:
-        mouseType = mEvent == WM_XBUTTONUP ? "mouse-up" : "mouse-down";
-        if (HIWORD(nMouseData) == XBUTTON1)
-        {
-            mouseButton = MouseButton::Back;
-        }
-        else if (HIWORD(nMouseData) == XBUTTON2)
-        {
-            mouseButton = MouseButton::Forward;
-        }
-        break;
-
-    case WM_MOUSEWHEEL:
-    case WM_MOUSEHWHEEL:
-        mouseType = "mouse-wheel";
-        mouseButton = (mEvent == WM_MOUSEWHEEL) ? MouseButton::WheelVertical : MouseButton::WheelHorizontal;
-        mouseFlag = GET_WHEEL_DELTA_WPARAM(nMouseData) > 0 ? 1 : -1;
-        break;
+        case WM_MOUSEWHEEL:
+        case WM_MOUSEHWHEEL:
+            mouseType = "mouse-wheel";
+            mouseButton = (mEvent == WM_MOUSEWHEEL) ? MouseButton::WheelVertical : MouseButton::WheelHorizontal;
+            mouseFlag = GET_WHEEL_DELTA_WPARAM(nMouseData) > 0 ? 1 : -1;
+            break;
     }
 
     // Check for text selection
@@ -1071,39 +1057,38 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
         {
             if (currentInstance->GetSelectedText(hwnd, selectionInfo) && !IsTrimmedEmpty(selectionInfo.text))
             {
-
                 switch (detectionType)
                 {
-                case SelectionDetectType::Drag:
-                {
-                    selectionInfo.mousePosStart = lastMouseDownPos;
-                    selectionInfo.mousePosEnd = lastMouseUpPos;
+                    case SelectionDetectType::Drag:
+                    {
+                        selectionInfo.mousePosStart = lastMouseDownPos;
+                        selectionInfo.mousePosEnd = lastMouseUpPos;
 
-                    if (selectionInfo.posLevel == SelectionPositionLevel::None)
-                        selectionInfo.posLevel = SelectionPositionLevel::MouseDual;
+                        if (selectionInfo.posLevel == SelectionPositionLevel::None)
+                            selectionInfo.posLevel = SelectionPositionLevel::MouseDual;
 
-                    break;
-                }
-                case SelectionDetectType::DoubleClick:
-                {
-                    selectionInfo.mousePosStart = lastMouseUpPos;
-                    selectionInfo.mousePosEnd = lastMouseUpPos;
+                        break;
+                    }
+                    case SelectionDetectType::DoubleClick:
+                    {
+                        selectionInfo.mousePosStart = lastMouseUpPos;
+                        selectionInfo.mousePosEnd = lastMouseUpPos;
 
-                    if (selectionInfo.posLevel == SelectionPositionLevel::None)
-                        selectionInfo.posLevel = SelectionPositionLevel::MouseSingle;
+                        if (selectionInfo.posLevel == SelectionPositionLevel::None)
+                            selectionInfo.posLevel = SelectionPositionLevel::MouseSingle;
 
-                    break;
-                }
-                case SelectionDetectType::ShiftClick:
-                {
-                    selectionInfo.mousePosStart = lastLastMouseUpPos;
-                    selectionInfo.mousePosEnd = lastMouseUpPos;
+                        break;
+                    }
+                    case SelectionDetectType::ShiftClick:
+                    {
+                        selectionInfo.mousePosStart = lastLastMouseUpPos;
+                        selectionInfo.mousePosEnd = lastMouseUpPos;
 
-                    if (selectionInfo.posLevel == SelectionPositionLevel::None)
-                        selectionInfo.posLevel = SelectionPositionLevel::MouseDual;
+                        if (selectionInfo.posLevel == SelectionPositionLevel::None)
+                            selectionInfo.posLevel = SelectionPositionLevel::MouseDual;
 
-                    break;
-                }
+                        break;
+                    }
                 }
 
                 auto callback = [selectionInfo](Napi::Env env, Napi::Function jsCallback)
@@ -1155,22 +1140,22 @@ void SelectionHook::ProcessKeyboardEvent(Napi::Env env, Napi::Function function,
     // Determine event type
     switch (kEvent)
     {
-    case WM_KEYDOWN:
-        eventType = "key-down";
-        sysKey = false;
-        break;
-    case WM_KEYUP:
-        eventType = "key-up";
-        sysKey = false;
-        break;
-    case WM_SYSKEYDOWN:
-        eventType = "key-down";
-        sysKey = true;
-        break;
-    case WM_SYSKEYUP:
-        eventType = "key-up";
-        sysKey = true;
-        break;
+        case WM_KEYDOWN:
+            eventType = "key-down";
+            sysKey = false;
+            break;
+        case WM_KEYUP:
+            eventType = "key-up";
+            sysKey = false;
+            break;
+        case WM_SYSKEYDOWN:
+            eventType = "key-down";
+            sysKey = true;
+            break;
+        case WM_SYSKEYUP:
+            eventType = "key-up";
+            sysKey = true;
+            break;
     }
 
     // Create and emit keyboard event object
@@ -1288,7 +1273,7 @@ bool SelectionHook::ShouldProcessGetSelection()
 
     if (FAILED(hr))
     {
-        lastResult = true; // If we can't determine state, allow text selection by default
+        lastResult = true;  // If we can't determine state, allow text selection by default
         return lastResult;
     }
 
@@ -1296,9 +1281,7 @@ bool SelectionHook::ShouldProcessGetSelection()
     // QUNS_RUNNING_D3D_FULL_SCREEN (3) - Running in full-screen mode
     // QUNS_BUSY (4) - System is busy
     // QUNS_PRESENTATION_MODE (5) - Presentation mode
-    lastResult = state != QUNS_RUNNING_D3D_FULL_SCREEN &&
-                 state != QUNS_BUSY &&
-                 state != QUNS_PRESENTATION_MODE;
+    lastResult = state != QUNS_RUNNING_D3D_FULL_SCREEN && state != QUNS_BUSY && state != QUNS_PRESENTATION_MODE;
     return lastResult;
 }
 
@@ -1313,15 +1296,15 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
     bool result = false;
     switch (clipboard_filter_mode)
     {
-    case FilterMode::Default:
-        result = true;
-        break;
-    case FilterMode::IncludeList:
-        result = IsInFilterList(programName, clipboard_filter_list);
-        break;
-    case FilterMode::ExcludeList:
-        result = !IsInFilterList(programName, clipboard_filter_list);
-        break;
+        case FilterMode::Default:
+            result = true;
+            break;
+        case FilterMode::IncludeList:
+            result = IsInFilterList(programName, clipboard_filter_list);
+            break;
+        case FilterMode::ExcludeList:
+            result = !IsInFilterList(programName, clipboard_filter_list);
+            break;
     }
 
     if (!result)
@@ -1338,7 +1321,6 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
         // beam is surely ok
         if (currentInstance->mouse_up_cursor != beamCursor)
         {
-
             // not beam, not arrow, not hand: invalid text selection cursor
             if (currentInstance->mouse_up_cursor != arrowCursor && currentInstance->mouse_up_cursor != handCursor)
             {
@@ -1362,7 +1344,8 @@ bool SelectionHook::ShouldProcessViaClipboard(HWND hwnd, std::wstring &programNa
              * chrome devtools: UIA_GroupControlTypeId (50026)
              * chrome pages: UIA_DocumentControlTypeId (50030), UIA_TextControlTypeId (50020)
              */
-            else if (uia_control_type != UIA_GroupControlTypeId && uia_control_type != UIA_DocumentControlTypeId && uia_control_type != UIA_TextControlTypeId)
+            else if (uia_control_type != UIA_GroupControlTypeId && uia_control_type != UIA_DocumentControlTypeId &&
+                     uia_control_type != UIA_TextControlTypeId)
             {
                 return false;
             }
@@ -1415,8 +1398,7 @@ bool SelectionHook::GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selecti
         // Approach 1: Try with TextPattern - using local scope for cleanup
         {
             IUIAutomationTextPattern *pTextPattern = nullptr;
-            hr = pFocusedElement->GetCurrentPatternAs(UIA_TextPatternId,
-                                                      __uuidof(IUIAutomationTextPattern),
+            hr = pFocusedElement->GetCurrentPatternAs(UIA_TextPatternId, __uuidof(IUIAutomationTextPattern),
                                                       (void **)&pTextPattern);
 
             if (SUCCEEDED(hr) && pTextPattern)
@@ -1433,7 +1415,7 @@ bool SelectionHook::GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selecti
                     if (SUCCEEDED(hr) && count > 0)
                     {
                         // Process each selection range
-                        for (int i = 0; i < count && !result; i++) // Continue until we find a valid selection
+                        for (int i = 0; i < count && !result; i++)  // Continue until we find a valid selection
                         {
                             IUIAutomationTextRange *pRange = nullptr;
                             hr = pRanges->GetElement(i, &pRange);
@@ -1481,8 +1463,8 @@ bool SelectionHook::GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selecti
                             HRESULT attrHr = pDocRange->GetAttributeValue(UIA_IsSelectionActivePropertyId, &varSel);
                             hr = pDocRange->GetText(-1, &bstr);
 
-                            if (SUCCEEDED(hr) && SUCCEEDED(attrHr) && bstr &&
-                                (varSel.vt == VT_BOOL) && (varSel.boolVal == VARIANT_TRUE))
+                            if (SUCCEEDED(hr) && SUCCEEDED(attrHr) && bstr && (varSel.vt == VT_BOOL) &&
+                                (varSel.boolVal == VARIANT_TRUE))
                             {
                                 // We have an active selection
                                 std::wstring selectedText = std::wstring(bstr);
@@ -1627,8 +1609,7 @@ bool SelectionHook::GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selecti
                             LONG lLower, lUpper;
 
                             if (SUCCEEDED(SafeArrayGetLBound(pArray, 1, &lLower)) &&
-                                SUCCEEDED(SafeArrayGetUBound(pArray, 1, &lUpper)) &&
-                                lLower <= lUpper)
+                                SUCCEEDED(SafeArrayGetUBound(pArray, 1, &lUpper)) && lLower <= lUpper)
                             {
                                 // For simplicity, just process the first element
                                 VARIANT varItem;
@@ -1639,7 +1620,8 @@ bool SelectionHook::GetTextViaUIAutomation(HWND hwnd, TextSelectionInfo &selecti
                                     if (varItem.vt == VT_DISPATCH && varItem.pdispVal)
                                     {
                                         IAccessible *pItemAcc = nullptr;
-                                        if (SUCCEEDED(varItem.pdispVal->QueryInterface(IID_IAccessible, (void **)&pItemAcc)))
+                                        if (SUCCEEDED(
+                                                varItem.pdispVal->QueryInterface(IID_IAccessible, (void **)&pItemAcc)))
                                         {
                                             VARIANT itemChild;
                                             VariantInit(&itemChild);
@@ -1688,8 +1670,7 @@ bool SelectionHook::GetTextViaAccessible(HWND hwnd, TextSelectionInfo &selection
 
     // Get IAccessible interface for the window
     IAccessible *pAcc = nullptr;
-    HRESULT hr = AccessibleObjectFromWindow(hwnd, OBJID_CLIENT,
-                                            IID_IAccessible, (void **)&pAcc);
+    HRESULT hr = AccessibleObjectFromWindow(hwnd, OBJID_CLIENT, IID_IAccessible, (void **)&pAcc);
 
     if (FAILED(hr) || !pAcc)
     {
@@ -1872,7 +1853,7 @@ bool SelectionHook::GetTextViaFocusedControl(HWND hwnd, TextSelectionInfo &selec
     {
         // We have a selection
         DWORD selLength = selEnd - selStart;
-        if (selLength > 0 && selLength < 8192) // Reasonable limit
+        if (selLength > 0 && selLength < 8192)  // Reasonable limit
         {
             // Approach 1: Use EM_GETSELTEXT (works for rich edit controls)
             wchar_t buffer[8192] = {0};
@@ -1886,7 +1867,8 @@ bool SelectionHook::GetTextViaFocusedControl(HWND hwnd, TextSelectionInfo &selec
             {
                 // Approach 2: Get all text and extract the selection manually
                 wchar_t fullTextBuffer[8192] = {0};
-                int fullTextLength = SendMessageW(focusedControl, WM_GETTEXT, sizeof(fullTextBuffer) / sizeof(wchar_t), (LPARAM)fullTextBuffer);
+                int fullTextLength = SendMessageW(focusedControl, WM_GETTEXT, sizeof(fullTextBuffer) / sizeof(wchar_t),
+                                                  (LPARAM)fullTextBuffer);
 
                 if (fullTextLength > 0 && selStart < static_cast<DWORD>(fullTextLength))
                 {
@@ -1929,7 +1911,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
     if (!hwnd)
         return false;
 
-    constexpr DWORD SLEEP_INTERVAL = 5; // milliseconds
+    constexpr DWORD SLEEP_INTERVAL = 5;  // milliseconds
 
     // If is_triggered_by_user,
     // it means we initiated the copy action ourselves,
@@ -1987,7 +1969,7 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
                 isVPressed = true;
 
             checkCount++;
-            Sleep(40); // Small delay between checks
+            Sleep(40);  // Small delay between checks
         }
 
         // wait for user copy timeout
@@ -2019,7 +2001,8 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
         return false;
     }
 
-    bool isInDelayReadList = !selectionInfo.programName.empty() && IsInFilterList(selectionInfo.programName, ftl_include_clipboard_delay_read);
+    bool isInDelayReadList = !selectionInfo.programName.empty() &&
+                             IsInFilterList(selectionInfo.programName, ftl_include_clipboard_delay_read);
 
     // if the program is in the delay read list, we only process Ctrl+C
     if (!isInDelayReadList)
@@ -2128,7 +2111,6 @@ bool SelectionHook::GetTextViaClipboard(HWND hwnd, TextSelectionInfo &selectionI
  */
 void SelectionHook::SendCopyKey(CopyKeyType type)
 {
-
     bool isCPressing = (GetAsyncKeyState('C') & 0x8000) != 0;
     bool isCtrlPressing = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
     bool isAltPressing = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
@@ -2160,7 +2142,8 @@ void SelectionHook::SendCopyKey(CopyKeyType type)
         inputs.push_back(input);
     }
 
-    // The following Ctrl+Insert or Ctrl+C key combinations are symmetric, meaning press and release events come in pairs
+    // The following Ctrl+Insert or Ctrl+C key combinations are symmetric, meaning press and release events come in
+    // pairs
 
     // Press the Ctrl key
     if (!isCtrlPressing)
@@ -2258,15 +2241,19 @@ bool SelectionHook::SetTextRangeCoordinates(IUIAutomationTextRange *pRange, Text
 
             // Set first paragraph's left-bottom point
             selectionInfo.startBottom.x = static_cast<LONG>(pRects[firstValidRectIndex]);
-            selectionInfo.startBottom.y = static_cast<LONG>(pRects[firstValidRectIndex + 1] + pRects[firstValidRectIndex + 3]); // top + height = bottom
+            selectionInfo.startBottom.y = static_cast<LONG>(pRects[firstValidRectIndex + 1] +
+                                                            pRects[firstValidRectIndex + 3]);  // top + height = bottom
 
             // Use last valid rectangle's bottom-right as end position (last paragraph right-bottom)
-            selectionInfo.endBottom.x = static_cast<LONG>(pRects[lastValidRectIndex] + pRects[lastValidRectIndex + 2]);     // left + width = right
-            selectionInfo.endBottom.y = static_cast<LONG>(pRects[lastValidRectIndex + 1] + pRects[lastValidRectIndex + 3]); // top + height = bottom
+            selectionInfo.endBottom.x =
+                static_cast<LONG>(pRects[lastValidRectIndex] + pRects[lastValidRectIndex + 2]);  // left + width = right
+            selectionInfo.endBottom.y = static_cast<LONG>(pRects[lastValidRectIndex + 1] +
+                                                          pRects[lastValidRectIndex + 3]);  // top + height = bottom
 
             // Set last paragraph's right-top point
-            selectionInfo.endTop.x = static_cast<LONG>(pRects[lastValidRectIndex] + pRects[lastValidRectIndex + 2]); // right
-            selectionInfo.endTop.y = static_cast<LONG>(pRects[lastValidRectIndex + 1]);                              // top
+            selectionInfo.endTop.x =
+                static_cast<LONG>(pRects[lastValidRectIndex] + pRects[lastValidRectIndex + 2]);  // right
+            selectionInfo.endTop.y = static_cast<LONG>(pRects[lastValidRectIndex + 1]);          // top
 
             selectionInfo.posLevel = SelectionPositionLevel::Full;
 
@@ -2367,7 +2354,8 @@ DWORD WINAPI SelectionHook::MouseKeyboardHookThreadProc(LPVOID lpParam)
 LRESULT CALLBACK SelectionHook::MouseHookCallback(int nCode, WPARAM wParam, LPARAM lParam)
 {
     // If not WM_MOUSEMOVE or WM_MOUSEMOVE has been requested, process event
-    if (nCode == HC_ACTION && currentInstance && !currentInstance->is_processing.load() && !(wParam == WM_MOUSEMOVE && !currentInstance->is_enabled_mouse_move_event))
+    if (nCode == HC_ACTION && currentInstance && !currentInstance->is_processing.load() &&
+        !(wParam == WM_MOUSEMOVE && !currentInstance->is_enabled_mouse_move_event))
     {
         // Prepare data to be processed
         MSLLHOOKSTRUCT *pMouseInfo = (MSLLHOOKSTRUCT *)lParam;
