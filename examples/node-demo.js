@@ -597,7 +597,7 @@ function showSelection(selectionData) {
     1: "UI Automation",
     2: "Focus Control",
     3: "Accessibility",
-    4: "Clipboard",
+    99: "Clipboard",
   };
 
   const posLevelMap = {

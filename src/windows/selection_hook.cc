@@ -83,7 +83,7 @@ enum class SelectionMethod
     UIA = 1,
     FocusControl = 2,
     Accessible = 3,
-    Clipboard = 4
+    Clipboard = 99
 };
 
 /**

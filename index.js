@@ -34,7 +34,7 @@ class SelectionHook extends EventEmitter {
     UIA: 1,
     FOCUSCTL: 2,
     ACCESSIBLE: 3,
-    CLIPBOARD: 4,
+    CLIPBOARD: 99,
   };
 
   static PositionLevel = {
