@@ -8,3 +8,4 @@ compile_commands.json
 .cursorrules
 .cache
 .clangd
+.DS_Store
