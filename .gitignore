@@ -2,6 +2,9 @@ node_modules
 build
 prebuilds
 bin
+compile_commands.json
 .backup
 .vscode
 .cursorrules
+.cache
+.clangd
