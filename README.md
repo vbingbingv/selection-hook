@@ -302,14 +302,15 @@ Describes mouse wheel scrolling events.
 
 Represents keyboard key presses/releases.
 
-| Property   | Type      | Description                       |
-| ---------- | --------- | --------------------------------- |
-| `sys`      | `boolean` | System key pressed (Alt/Ctrl/Win) |
-| `vkCode`   | `number`  | Windows virtual key code          |
-| `scanCode` | `number`  | Hardware scan code                |
-| `flags`    | `number`  | Additional state flags            |
-| `type`     | `string?` | Internal event type               |
-| `action`   | `string?` | `"key-down"` or `"key-up"`        |
+| Property   | Type      | Description                                                                 |
+| ---------- | --------- | --------------------------------------------------------------------------- |
+| `uniKey`   | `string`  | Unified key name, refer to MDN `KeyboardEvent.key`, converted from `vkCode` |
+| `vkCode`   | `number`  | Virtual key code. Definitions and values vary by platforms.                 |
+| `sys`      | `boolean` | Whether modifier keys (Alt/Ctrl/Win/⌘/⌥/Fn) are pressed simultaneously      |
+| `scanCode` | `number?` | Hardware scan code. _Windows Only_                                          |
+| `flags`    | `number`  | Additional state flags.                                                     |
+| `type`     | `string?` | Internal event type                                                         |
+| `action`   | `string?` | `"key-down"` or `"key-up"`                                                  |
 
 ### Constants
 

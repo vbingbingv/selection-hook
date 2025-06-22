@@ -39,6 +39,7 @@
 #include <thread>
 
 #include "lib/clipboard.h"
+#include "lib/keyboard.h"
 #include "lib/string_pool.h"
 #include "lib/utils.h"
 
@@ -1203,11 +1204,16 @@ void SelectionHook::ProcessKeyboardEvent(Napi::Env env, Napi::Function function,
     // Create and emit keyboard event object
     if (eventType[0] != '\0')
     {
+        // Convert virtual key code to MDN KeyboardEvent.key value
+        // cost: ~5us, max 100us (<5%)
+        std::string uniKey = convertVkCodeToUniKey(vkCode, scanCode, flags);
+
         Napi::Object resultObj = Napi::Object::New(env);
         resultObj.Set(Napi::String::New(env, "type"), Napi::String::New(env, "keyboard-event"));
         resultObj.Set(Napi::String::New(env, "action"), Napi::String::New(env, eventType));
-        resultObj.Set(Napi::String::New(env, "sys"), Napi::Boolean::New(env, isSysKey));
+        resultObj.Set(Napi::String::New(env, "uniKey"), Napi::String::New(env, uniKey));
         resultObj.Set(Napi::String::New(env, "vkCode"), Napi::Number::New(env, vkCode));
+        resultObj.Set(Napi::String::New(env, "sys"), Napi::Boolean::New(env, isSysKey));
         resultObj.Set(Napi::String::New(env, "scanCode"), Napi::Number::New(env, scanCode));
         resultObj.Set(Napi::String::New(env, "flags"), Napi::Number::New(env, flags));
         function.Call({resultObj});

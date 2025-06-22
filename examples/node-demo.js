@@ -238,9 +238,9 @@ function setupKeyboardEventListeners() {
       console.log(
         colors.highlight,
         "Key down:",
-        `vkCode: ${eventData.vkCode}, scanCode: ${eventData.scanCode}, flags: ${eventData.flags}${
-          eventData.sys ? ", system key" : ""
-        }`
+        `uniKey: ${eventData.uniKey}, vkCode: ${eventData.vkCode}, scanCode: ${
+          eventData.scanCode
+        }, flags: ${eventData.flags}${eventData.sys ? ", system key" : ""}`
       );
     }
 
@@ -286,9 +286,9 @@ function setupKeyboardEventListeners() {
       console.log(
         colors.highlight,
         "Key up:",
-        `vkCode: ${eventData.vkCode}, scanCode: ${eventData.scanCode}, flags: ${eventData.flags}${
-          eventData.sys ? ", system key" : ""
-        }`
+        `uniKey: ${eventData.uniKey}, vkCode: ${eventData.vkCode}, scanCode: ${
+          eventData.scanCode
+        }, flags: ${eventData.flags}${eventData.sys ? ", system key" : ""}`
       );
     }
 

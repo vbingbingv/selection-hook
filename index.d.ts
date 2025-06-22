@@ -78,13 +78,24 @@ export interface MouseWheelEventData {
  * Contains information about keyboard events such as key presses and releases.
  */
 export interface KeyboardEventData {
-  /** Whether a system key was pressed (e.g., Alt) */
-  sys: boolean;
-  /** Virtual key code (Windows VK_* constants) */
+  /**
+   * Unified key value of the vkCode. Same as MDN `KeyboardEvent.key` values.
+   * Converted from platform-specific vkCode.
+   *
+   * Values defined in https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values
+   */
+  uniKey: string;
+  /** Virtual key code. The value is different on different platforms.
+   *
+   * Windows: VK_* values of vkCode, refer to https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+   * macOS: kVK_* values of kCGKeyboardEventKeycode, defined in `HIToolbox/Events.h`
+   */
   vkCode: number;
-  /** Keyboard scan code */
-  scanCode: number;
-  /** Additional key flags */
+  /** Whether modifier keys (Alt/Ctrl/Win/⌘/⌥/Fn) are pressed simultaneously */
+  sys: boolean;
+  /** Keyboard scan code. Windows Only. */
+  scanCode?: number;
+  /** Additional key flags. Varies on different platforms. */
   flags: number;
   /** Internal event type identifier */
   type?: string;
