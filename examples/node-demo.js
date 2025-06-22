@@ -187,7 +187,11 @@ function setupMouseEventListeners() {
   // Mouse move events (high CPU usage - disabled by default)
   hook.on("mouse-move", (eventData) => {
     if (config.showMouseMoveEvents) {
-      console.log(colors.warning, "Mouse move:", `x: ${eventData.x}, y: ${eventData.y}`);
+      console.log(
+        colors.warning,
+        "Mouse move:",
+        `x: ${eventData.x}, y: ${eventData.y}, button: ${eventData.button}`
+      );
     }
   });
 
