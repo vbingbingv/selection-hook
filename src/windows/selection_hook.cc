@@ -1182,26 +1182,21 @@ void SelectionHook::ProcessKeyboardEvent(Napi::Env env, Napi::Function function,
     delete pKeyboardEvent;
 
     auto eventType = "";
-    auto sysKey = false;
+    // Check if any system key (Ctrl, Alt, Win) is being pressed
+    // Cost ~50us
+    auto isSysKey = (GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_MENU) & 0x8000) ||
+                    (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000);
 
     // Determine event type
     switch (kEvent)
     {
         case WM_KEYDOWN:
-            eventType = "key-down";
-            sysKey = false;
-            break;
-        case WM_KEYUP:
-            eventType = "key-up";
-            sysKey = false;
-            break;
         case WM_SYSKEYDOWN:
             eventType = "key-down";
-            sysKey = true;
             break;
+        case WM_KEYUP:
         case WM_SYSKEYUP:
             eventType = "key-up";
-            sysKey = true;
             break;
     }
 
@@ -1211,7 +1206,7 @@ void SelectionHook::ProcessKeyboardEvent(Napi::Env env, Napi::Function function,
         Napi::Object resultObj = Napi::Object::New(env);
         resultObj.Set(Napi::String::New(env, "type"), Napi::String::New(env, "keyboard-event"));
         resultObj.Set(Napi::String::New(env, "action"), Napi::String::New(env, eventType));
-        resultObj.Set(Napi::String::New(env, "sys"), Napi::Boolean::New(env, sysKey));
+        resultObj.Set(Napi::String::New(env, "sys"), Napi::Boolean::New(env, isSysKey));
         resultObj.Set(Napi::String::New(env, "vkCode"), Napi::Number::New(env, vkCode));
         resultObj.Set(Napi::String::New(env, "scanCode"), Napi::Number::New(env, scanCode));
         resultObj.Set(Napi::String::New(env, "flags"), Napi::Number::New(env, flags));
