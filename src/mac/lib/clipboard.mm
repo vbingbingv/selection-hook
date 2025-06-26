@@ -11,8 +11,6 @@
  */
 bool ReadClipboard(std::string &content)
 {
-    printf("ReadClipboard isMainThread %d\n", [NSThread isMainThread]);
-
     content.clear();
 
     @autoreleasepool
