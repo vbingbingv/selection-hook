@@ -99,6 +99,30 @@ jobs:
           name: macos-release-assets
           path: build/release-assets/
 
+      # Restore prebuilds directory structure for npm publish
+      - name: Restore prebuilds for npm publish
+        run: |
+          # Clean and recreate prebuilds directory to ensure clean state
+          rm -rf prebuilds
+          mkdir -p prebuilds/win32-x64
+          mkdir -p prebuilds/win32-arm64
+          mkdir -p prebuilds/darwin-x64
+          mkdir -p prebuilds/darwin-arm64
+
+          # Copy Windows binaries back to prebuilds directory
+          cp build/release-assets/selection-hook-win32-x64.node prebuilds/win32-x64/selection-hook.node
+          cp build/release-assets/selection-hook-win32-arm64.node prebuilds/win32-arm64/selection-hook.node
+
+          # Copy macOS binaries back to prebuilds directory
+          cp build/release-assets/selection-hook-darwin-x64.node prebuilds/darwin-x64/selection-hook.node
+          cp build/release-assets/selection-hook-darwin-arm64.node prebuilds/darwin-arm64/selection-hook.node
+
+          # Verify all files are in place
+          echo "Prebuilds directory contents:"
+          ls -la prebuilds/*/
+          echo "File sizes:"
+          du -h prebuilds/*/*.node
+
       # Upload all release assets to GitHub release
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1
