@@ -5,7 +5,7 @@ on:
     types: [released]
 
 jobs:
-  build-and-npmpublish:
+  build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,9 +15,9 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - uses: ilammy/msvc-dev-cmd@v1
       - run: npm ci
-      - run: npm run prebuild
-      # Prepare release assets
-      - name: Prepare release assets
+      - run: npm run prebuild:win
+      # Prepare Windows release assets
+      - name: Prepare Windows release assets
         run: |
           New-Item -ItemType Directory -Path "build/release-assets" -Force
           if (Test-Path "prebuilds/win32-x64/selection-hook.node") {
@@ -32,16 +32,85 @@ jobs:
             Write-Error "arm64 binary not found!"
             exit 1
           }
-      # Upload release assets
+      # Upload Windows release assets
+      - name: Upload Windows Release Assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-assets
+          path: build/release-assets/*
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+      - run: npm ci
+      - run: npm run prebuild:mac
+      # Prepare macOS release assets
+      - name: Prepare macOS release assets
+        run: |
+          mkdir -p build/release-assets
+          if [ -f "prebuilds/darwin-x64/selection-hook.node" ]; then
+            cp "prebuilds/darwin-x64/selection-hook.node" "build/release-assets/selection-hook-darwin-x64.node"
+          else
+            echo "x64 binary not found!"
+            exit 1
+          fi
+          if [ -f "prebuilds/darwin-arm64/selection-hook.node" ]; then
+            cp "prebuilds/darwin-arm64/selection-hook.node" "build/release-assets/selection-hook-darwin-arm64.node"
+          else
+            echo "arm64 binary not found!"
+            exit 1
+          fi
+
+      # Upload macOS release assets
+      - name: Upload macOS Release Assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-assets
+          path: build/release-assets/*
+
+  publish:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+      - run: npm ci
+
+      # Download all release assets
+      - name: Download Windows release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release-assets
+          path: build/release-assets/
+
+      - name: Download macOS release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-release-assets
+          path: build/release-assets/
+
+      # Upload all release assets to GitHub release
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1
         with:
           files: |
             build/release-assets/selection-hook-win32-x64.node
             build/release-assets/selection-hook-win32-arm64.node
+            build/release-assets/selection-hook-darwin-x64.node
+            build/release-assets/selection-hook-darwin-arm64.node
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+      # Publish to NPM with all prebuilds
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_PUBLISH_TOKEN}}
