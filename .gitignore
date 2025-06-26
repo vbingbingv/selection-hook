@@ -5,3 +5,8 @@ bin
 .backup
 .vscode
 .cursorrules
+
+
+# Added by cargo
+
+/target
