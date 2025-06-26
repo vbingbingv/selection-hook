@@ -2,7 +2,7 @@
  * Node Selection Hook
  *
  * This module provides a Node.js interface for monitoring text selections
- * across applications on Windows using UI Automation and Accessibility APIs.
+ * across applications on Windows and macOS using UI Automation and Accessibility APIs.
  *
  * Copyright (c) 2025 0xfullex (https://github.com/0xfullex/selection-hook)
  * Licensed under the MIT License
@@ -12,17 +12,20 @@ const EventEmitter = require("events");
 const gypBuild = require("node-gyp-build");
 const path = require("path");
 
+const isWindows = process.platform === "win32";
+const isMac = process.platform === "darwin";
+
 let nativeModule = null;
 // Make debugFlag a private module variable to avoid global state issues
 let _debugFlag = false;
 
 try {
-  if (process.platform !== "win32") {
-    throw new Error("This module only supports Windows platform");
+  if (!isWindows && !isMac) {
+    throw new Error("[selection-hook] Only supports Windows and macOS platforms");
   }
   nativeModule = gypBuild(path.resolve(__dirname));
 } catch (err) {
-  console.error("Failed to load native module:", err.message);
+  console.error("[selection-hook] Failed to load native module:", err.message);
 }
 
 class SelectionHook extends EventEmitter {
@@ -34,6 +37,7 @@ class SelectionHook extends EventEmitter {
     UIA: 1,
     FOCUSCTL: 2,
     ACCESSIBLE: 3,
+    AXAPI: 11,
     CLIPBOARD: 99,
   };
 
@@ -58,7 +62,9 @@ class SelectionHook extends EventEmitter {
 
   constructor() {
     if (!nativeModule) {
-      throw new Error("Native module failed to load - only works on Windows");
+      throw new Error(
+        "[selection-hook] Native module failed to load - only works on Windows and macOS"
+      );
     }
     super();
   }
@@ -126,7 +132,7 @@ class SelectionHook extends EventEmitter {
       this.emit("status", "started");
       return true;
     } catch (err) {
-      this.#handleError("Failed to start hook", err);
+      this.#handleError("Failed to start hook", err, "fatal");
       return false;
     }
   }
@@ -147,7 +153,7 @@ class SelectionHook extends EventEmitter {
       this.emit("status", "stopped");
       return true;
     } catch (err) {
-      this.#handleError("Failed to stop hook", err);
+      this.#handleError("Failed to stop hook", err, "fatal");
       this.#running = false;
       return false;
     }
@@ -368,10 +374,7 @@ class SelectionHook extends EventEmitter {
    * @returns {boolean} Success status
    */
   writeToClipboard(text) {
-    if (!this.#instance || !this.#running) {
-      this.#logDebug("Text selection hook not running");
-      return false;
-    }
+    if (!this.#checkRunning()) return false;
 
     if (typeof text !== "string") {
       this.#handleError("Text must be a string", new Error("Invalid argument"));
@@ -391,16 +394,62 @@ class SelectionHook extends EventEmitter {
    * @returns {string|null} Text from clipboard or null if empty or error
    */
   readFromClipboard() {
-    if (!this.#instance || !this.#running) {
-      this.#logDebug("Text selection hook not running");
-      return null;
-    }
+    if (!this.#checkRunning()) return null;
 
     try {
       return this.#instance.readFromClipboard();
     } catch (err) {
       this.#handleError("Failed to read text from clipboard", err);
       return null;
+    }
+  }
+
+  /**
+   * Check if the process is trusted for accessibility (macOS only)
+   * @returns {boolean} True if the process is trusted for accessibility, false otherwise
+   */
+  macIsProcessTrusted() {
+    if (!isMac) {
+      this.#logDebug("Not supported on this platform");
+      return false;
+    }
+
+    //don't need to be running
+    if (!this.#instance) {
+      this.#logDebug("Text selection hook instance not created");
+      return false;
+    }
+
+    try {
+      return this.#instance.macIsProcessTrusted();
+    } catch (err) {
+      this.#handleError("Failed to check macOS process trust status", err);
+      return false;
+    }
+  }
+
+  /**
+   * Try to request accessibility permissions (macOS only)
+   * This MAY show a dialog to the user if permissions are not granted
+   * @returns {boolean} The current permission status, not the request result
+   */
+  macRequestProcessTrust() {
+    if (!isMac) {
+      this.#logDebug("Not supported on this platform");
+      return false;
+    }
+
+    //don't need to be running
+    if (!this.#instance) {
+      this.#logDebug("Text selection hook instance not created");
+      return false;
+    }
+
+    try {
+      return this.#instance.macRequestProcessTrust();
+    } catch (err) {
+      this.#handleError("Failed to request macOS process trust", err);
+      return false;
     }
   }
 
@@ -506,11 +555,13 @@ class SelectionHook extends EventEmitter {
     return true;
   }
 
-  #handleError(message, err) {
-    if (!_debugFlag) return;
+  // level:  "error" or "fatal"
+  // fatal will always show the error message
+  #handleError(message, err, level = "error") {
+    if (!_debugFlag && level === "error") return;
 
     const errorMsg = `${message}: ${err.message}`;
-    console.error("[SelectionHook] ", errorMsg);
+    console.error("[selection-hook] ", errorMsg);
 
     if (err.stack) {
       console.error(err.stack);
@@ -521,7 +572,7 @@ class SelectionHook extends EventEmitter {
 
   #logDebug(message) {
     if (_debugFlag) {
-      console.warn("[SelectionHook] ", message);
+      console.warn("[selection-hook] ", message);
     }
   }
 }
