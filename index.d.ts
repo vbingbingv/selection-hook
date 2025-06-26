@@ -50,6 +50,7 @@ export interface MouseEventData {
   /** Mouse button identifier,
    * same as WebAPIs' MouseEvent.button
    * Left = 0, Middle = 1, Right = 2, Back = 3, Forward = 4,
+   * Unknown = -1
    */
   button: number;
 }
@@ -78,13 +79,24 @@ export interface MouseWheelEventData {
  * Contains information about keyboard events such as key presses and releases.
  */
 export interface KeyboardEventData {
-  /** Whether a system key was pressed (e.g., Alt) */
-  sys: boolean;
-  /** Virtual key code (Windows VK_* constants) */
+  /**
+   * Unified key value of the vkCode. Same as MDN `KeyboardEvent.key` values.
+   * Converted from platform-specific vkCode.
+   *
+   * Values defined in https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values
+   */
+  uniKey: string;
+  /** Virtual key code. The value is different on different platforms.
+   *
+   * Windows: VK_* values of vkCode, refer to https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+   * macOS: kVK_* values of kCGKeyboardEventKeycode, defined in `HIToolbox/Events.h`
+   */
   vkCode: number;
-  /** Keyboard scan code */
-  scanCode: number;
-  /** Additional key flags */
+  /** Whether modifier keys (Alt/Ctrl/Win/⌘/⌥/Fn) are pressed simultaneously */
+  sys: boolean;
+  /** Keyboard scan code. Windows Only. */
+  scanCode?: number;
+  /** Additional key flags. Varies on different platforms. */
   flags: number;
   /** Internal event type identifier */
   type?: string;
@@ -125,7 +137,8 @@ declare class SelectionHook extends EventEmitter {
     UIA: 1;
     FOCUSCTL: 2;
     ACCESSIBLE: 3;
-    CLIPBOARD: 4;
+    AXAPI: 11;
+    CLIPBOARD: 99;
   };
 
   static PositionLevel: {
@@ -300,6 +313,25 @@ declare class SelectionHook extends EventEmitter {
    * @returns {string|null} Text from clipboard or null if empty or error
    */
   readFromClipboard(): string | null;
+
+  /**
+   * Check if the process is trusted for accessibility (macOS only)
+   *
+   * Checks whether the current process has accessibility permissions
+   * required for text selection monitoring on macOS.
+   *
+   * @returns {boolean} True if the process is trusted for accessibility, false otherwise
+   */
+  macIsProcessTrusted(): boolean;
+
+  /**
+   * Try to request accessibility permissions (macOS only)
+   *
+   * This MAY show a dialog to the user if permissions are not granted.
+   *
+   * @returns {boolean} The current permission status, not the request result
+   */
+  macRequestProcessTrust(): boolean;
 
   /**
    * Release resources

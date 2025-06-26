@@ -13,23 +13,31 @@ Maybe the first-ever open-source, fully functional text selection tool.
   - Auto-triggers on user selection, or manual API triggers
   - Rich API to control the selection behaviors
 - **Input event listeners**
-  - Mouse events: `down/up/wheel/move`
-  - Keyboard events: `keydown/keyup`
+  - Mouse events: `down/up/wheel/move` with buttons
+  - Keyboard events: `keydown/keyup` with keys
   - _No additional hooks required_ – works natively.
 - **Multi-method text extraction** (automatic fallback):
-  - _UI Automation_ (modern apps)
-  - _Accessibility APIs_ (legacy apps)
-  - _Focused control_ (active input fields)
-  - _Clipboard fallback_ (simulated `Ctrl+C` with optimizations)
+  - For Windows: 
+    - _UI Automation_ (modern apps)
+    - _Accessibility API_ (legacy apps)
+    - _Focused control_ (active input fields)
+  - For macOS:
+    - _Accessibility API (AXAPI)_
+  - For all platforms:
+    - _Clipboard fallback_ (simulated `Ctrl+C`/`⌘+C` with optimizations when all other methods fail)
 - **Clipboard**
   - Read/write clipboard
 - **Compatibility**
   - Node.js `v10+` | Electron `v3+`
   - TypeScript support included.
 
-## Platform
+## Supported Platforms
 
-Currently only supports Windows. macOS/Linux support is coming soon.
+| Platform | Status |
+|----------|--------|
+| Windows  | ✅ Fully supported. Windows 7+ |
+| macOS    | ✅ Fully supported. macOS 10.14+ |
+| Linux    | 🚧 Coming soon. |
 
 ## Installation
 
@@ -123,6 +131,12 @@ Config options (with default values):
 
 see [`SelectionHook.FilterMode`](#selectionhookfiltermode) for details
 
+**For _macOS_**:
+macOS requires accessibility permissions for the selection-hook to function properly. Please ensure that the user has enabled accessibility permissions before calling start().
+
+- **Node**: use `selection-hook`'s `macIsProcessTrusted` and `macRequestProcessTrust` to check whether the permission is granted.
+- **Electron**: use `electon`'s `systemPreferences.isTrustedAccessibilityClient` to check whether the permission is granted.
+
 #### **`stop(): boolean`**
 
 Stop monitoring text selections.
@@ -157,6 +171,8 @@ Configure which applications should trigger text selection events. You can inclu
 
 #### **`setFineTunedList(listType: FineTunedListType, programList?: string[]): boolean`**
 
+_Windows Only_
+
 Configure fine-tuned lists for specific application behaviors. This allows you to customize how the selection hook behaves with certain applications that may have unique characteristics.
 
 For example, you can add `acrobat.exe` to those lists to enable text seleted in Acrobat.
@@ -178,6 +194,20 @@ Write text to the system clipboard. This is useful for implementing custom copy 
 #### **`readFromClipboard(): string | null`**
 
 Read text from the system clipboard. Returns clipboard text content as string, or null if clipboard is empty or contains non-text data.
+
+#### **`macIsProcessTrusted(): boolean`**
+
+_macOS Only_
+
+Check if the process is trusted for accessibility. If the process is not trusted, selection-hook will still run, but it won't respond to any events. Make sure to guide the user through the authorization process before calling start().
+
+#### **`macRequestProcessTrust(): boolean`**
+
+_macOS Only_
+
+Try to request accessibility permissions. This MAY show a dialog to the user if permissions are not granted. 
+
+Note: The return value indicates the current permission status, not the request result.
 
 #### **`isRunning(): boolean`**
 
@@ -252,7 +282,7 @@ hook.on("error", (error: Error) => {
 
 ### Data Structure
 
-**Note**: All coordinates are in physical coordinates (virtual screen coordinates) in Windows. You can use `screen.screenToDipPoint(point)` in Electron to convert the point to logical coordinates.
+**Note**: All coordinates are in physical coordinates (virtual screen coordinates) in Windows. You can use `screen.screenToDipPoint(point)` in Electron to convert the point to logical coordinates. In macOS, you don't need to do extra work.
 
 #### `TextSelectionData`
 
@@ -283,11 +313,13 @@ When `PositionLevel` is:
 
 Contains mouse click/movement information in screen coordinates.
 
-| Property | Type     | Description                                                                                      |
-| -------- | -------- | ------------------------------------------------------------------------------------------------ |
-| `x`      | `number` | Horizontal pointer position (px)                                                                 |
-| `y`      | `number` | Vertical pointer position (px)                                                                   |
-| `button` | `number` | Same as WebAPIs' MouseEvent.button <br /> `0`=Left, `1`=Middle, `2`=Right, `3`=Back, `4`=Forward |
+| Property | Type     | Description                                                                                                                     |
+| -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `x`      | `number` | Horizontal pointer position (px)                                                                                                |
+| `y`      | `number` | Vertical pointer position (px)                                                                                                  |
+| `button` | `number` | Same as WebAPIs' MouseEvent.button <br /> `0`=Left, `1`=Middle, `2`=Right, `3`=Back, `4`=Forward <br /> `-1`=None, `99`=Unknown |
+
+If `button != -1` when `mouse-move`, which means it's dragging. 
 
 #### `MouseWheelEventData`
 
@@ -302,14 +334,19 @@ Describes mouse wheel scrolling events.
 
 Represents keyboard key presses/releases.
 
-| Property   | Type      | Description                       |
-| ---------- | --------- | --------------------------------- |
-| `sys`      | `boolean` | System key pressed (Alt/Ctrl/Win) |
-| `vkCode`   | `number`  | Windows virtual key code          |
-| `scanCode` | `number`  | Hardware scan code                |
-| `flags`    | `number`  | Additional state flags            |
-| `type`     | `string?` | Internal event type               |
-| `action`   | `string?` | `"key-down"` or `"key-up"`        |
+| Property   | Type      | Description                                                                 |
+| ---------- | --------- | --------------------------------------------------------------------------- |
+| `uniKey`   | `string`  | Unified key name, refer to MDN `KeyboardEvent.key`, converted from `vkCode` |
+| `vkCode`   | `number`  | Virtual key code. Definitions and values vary by platforms.                 |
+| `sys`      | `boolean` | Whether modifier keys (Alt/Ctrl/Win/⌘/⌥/Fn) are pressed simultaneously      |
+| `scanCode` | `number?` | Hardware scan code. _Windows Only_                                          |
+| `flags`    | `number`  | Additional state flags.                                                     |
+| `type`     | `string?` | Internal event type                                                         |
+| `action`   | `string?` | `"key-down"` or `"key-up"`                                                  |
+
+About vkCode:
+- Windows: VK_* values of vkCode
+- macOS: kVK_* values of kCGKeyboardEventKeycode
 
 ### Constants
 
@@ -318,9 +355,10 @@ Represents keyboard key presses/releases.
 Indicates which method was used to detect the text selection:
 
 - `NONE`: No selection detected
-- `UIA`: UI Automation
-- `FOCUSCTL`: Focused control
-- `ACCESSIBLE`: Accessibility interface
+- `UIA`: UI Automation (Windows)
+- `ACCESSIBLE`: Accessibility interface (Windows)
+- `FOCUSCTL`: Focused control (Windows)
+- `AXAPI`: Accessibility API (macOS)
 - `CLIPBOARD`: Clipboard fallback
 
 #### **`SelectionHook.PositionLevel`**
@@ -375,4 +413,4 @@ See [`index.d.ts`](https://github.com/0xfullex/selection-hook/blob/main/index.d.
 
 This project is used by:
 
-- **[Cherry Studio](https://github.com/CherryHQ/cherry-studio)**: A full-featured AI client, with Selection Assistant that conveniently enables AI-powered translation, explanation, summarization, and more for selected text.
+- **[Cherry Studio](https://github.com/CherryHQ/cherry-studio)**: A full-featured AI client, with Selection Assistant that conveniently enables AI-powered translation, explanation, summarization, and more for selected text. _(This lib was originally developed specifically for Cherry Studio, which showcases the best practices for using)_

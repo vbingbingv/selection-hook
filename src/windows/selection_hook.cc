@@ -39,6 +39,7 @@
 #include <thread>
 
 #include "lib/clipboard.h"
+#include "lib/keyboard.h"
 #include "lib/string_pool.h"
 #include "lib/utils.h"
 
@@ -83,7 +84,7 @@ enum class SelectionMethod
     UIA = 1,
     FocusControl = 2,
     Accessible = 3,
-    Clipboard = 4
+    Clipboard = 99
 };
 
 /**
@@ -102,6 +103,7 @@ enum class SelectionPositionLevel
 enum class MouseButton
 {
     None = -1,
+    Unknown = 99,
     Left = 0,
     Middle = 1,
     Right = 2,
@@ -892,6 +894,10 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
     static HWND lastWindowHandler = nullptr;
     static RECT lastWindowRect = {0};
 
+    // Mouse button pressing state flags (bit flags)
+    // Bit 0: LBUTTON, Bit 1: RBUTTON, Bit 2: MBUTTON, Bit 3: XBUTTON1, Bit 4: XBUTTON2
+    static DWORD mouseButtonPressingFlag = 0;
+
     bool shouldDetectSelection = false;
     auto detectionType = SelectionDetectType::None;  // 0=not set, 1=drag, 2=double click
     auto mouseType = "";
@@ -901,14 +907,12 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
     // Process different mouse events
     switch (mEvent)
     {
-        case WM_MOUSEMOVE:
-            mouseType = "mouse-move";
-            break;
-
         case WM_LBUTTONDOWN:
         {
             mouseType = "mouse-down";
             mouseButton = MouseButton::Left;
+            // Set LBUTTON bit (bit 0)
+            mouseButtonPressingFlag |= 0x01;
 
             lastMouseDownTime = GetTickCount();
             lastMouseDownPos = currentPos;
@@ -929,6 +933,8 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
         {
             mouseType = "mouse-up";
             mouseButton = MouseButton::Left;
+            // Clear LBUTTON bit (bit 0)
+            mouseButtonPressingFlag &= ~0x01;
 
             DWORD currentTime = GetTickCount();
 
@@ -1007,44 +1013,85 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
             break;
         }
 
+        case WM_MOUSEMOVE:
+            mouseType = "mouse-move";
+
+            // Check which buttons are currently pressed and set mouseButton accordingly
+            mouseButton = [flag = mouseButtonPressingFlag]
+            {
+                if (flag & 0x01)
+                    return MouseButton::Left;
+                if (flag & 0x02)
+                    return MouseButton::Right;
+                if (flag & 0x04)
+                    return MouseButton::Middle;
+                if (flag & 0x08)
+                    return MouseButton::Back;
+                if (flag & 0x10)
+                    return MouseButton::Forward;
+                return MouseButton::None;
+            }();
+
+            break;
+
         case WM_RBUTTONDOWN:
             mouseType = "mouse-down";
             mouseButton = MouseButton::Right;
+            // Set RBUTTON bit (bit 1)
+            mouseButtonPressingFlag |= 0x02;
             break;
 
         case WM_RBUTTONUP:
             mouseType = "mouse-up";
             mouseButton = MouseButton::Right;
+            // Clear RBUTTON bit (bit 1)
+            mouseButtonPressingFlag &= ~0x02;
             break;
 
         case WM_MBUTTONUP:
             mouseType = "mouse-up";
             mouseButton = MouseButton::Middle;
+            // Clear MBUTTON bit (bit 2)
+            mouseButtonPressingFlag &= ~0x04;
             break;
 
         case WM_MBUTTONDOWN:
             mouseType = "mouse-down";
             mouseButton = MouseButton::Middle;
+            // Set MBUTTON bit (bit 2)
+            mouseButtonPressingFlag |= 0x04;
             break;
 
         case WM_XBUTTONUP:
         case WM_XBUTTONDOWN:
+        {
             mouseType = mEvent == WM_XBUTTONUP ? "mouse-up" : "mouse-down";
-            if (HIWORD(nMouseData) == XBUTTON1)
-            {
-                mouseButton = MouseButton::Back;
-            }
-            else if (HIWORD(nMouseData) == XBUTTON2)
-            {
-                mouseButton = MouseButton::Forward;
-            }
+
+            // Determine which X button was pressed
+            bool isXButton1 = (HIWORD(nMouseData) == XBUTTON1);
+            mouseButton = isXButton1 ? MouseButton::Back : MouseButton::Forward;
+
+            // Update button pressing flag
+            DWORD buttonBit = isXButton1 ? 0x08 : 0x10;  // XBUTTON1 = bit 3, XBUTTON2 = bit 4
+
+            if (mEvent == WM_XBUTTONDOWN)
+                mouseButtonPressingFlag |= buttonBit;  // Set bit
+            else
+                mouseButtonPressingFlag &= ~buttonBit;  // Clear bit
+
             break;
+        }
 
         case WM_MOUSEWHEEL:
         case WM_MOUSEHWHEEL:
             mouseType = "mouse-wheel";
             mouseButton = (mEvent == WM_MOUSEWHEEL) ? MouseButton::WheelVertical : MouseButton::WheelHorizontal;
             mouseFlag = GET_WHEEL_DELTA_WPARAM(nMouseData) > 0 ? 1 : -1;
+            break;
+
+        default:
+            mouseType = "unknown";
+            mouseButton = MouseButton::Unknown;
             break;
     }
 
@@ -1136,37 +1183,37 @@ void SelectionHook::ProcessKeyboardEvent(Napi::Env env, Napi::Function function,
     delete pKeyboardEvent;
 
     auto eventType = "";
-    auto sysKey = false;
+    // Check if any system key (Ctrl, Alt, Win) is being pressed
+    // Cost ~50us
+    auto isSysKey = (GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_MENU) & 0x8000) ||
+                    (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000);
 
     // Determine event type
     switch (kEvent)
     {
         case WM_KEYDOWN:
-            eventType = "key-down";
-            sysKey = false;
-            break;
-        case WM_KEYUP:
-            eventType = "key-up";
-            sysKey = false;
-            break;
         case WM_SYSKEYDOWN:
             eventType = "key-down";
-            sysKey = true;
             break;
+        case WM_KEYUP:
         case WM_SYSKEYUP:
             eventType = "key-up";
-            sysKey = true;
             break;
     }
 
     // Create and emit keyboard event object
     if (eventType[0] != '\0')
     {
+        // Convert virtual key code to MDN KeyboardEvent.key value
+        // cost: ~5us, max 100us (<5%)
+        std::string uniKey = convertVkCodeToUniKey(vkCode, scanCode, flags);
+
         Napi::Object resultObj = Napi::Object::New(env);
         resultObj.Set(Napi::String::New(env, "type"), Napi::String::New(env, "keyboard-event"));
         resultObj.Set(Napi::String::New(env, "action"), Napi::String::New(env, eventType));
-        resultObj.Set(Napi::String::New(env, "sys"), Napi::Boolean::New(env, sysKey));
+        resultObj.Set(Napi::String::New(env, "uniKey"), Napi::String::New(env, uniKey));
         resultObj.Set(Napi::String::New(env, "vkCode"), Napi::Number::New(env, vkCode));
+        resultObj.Set(Napi::String::New(env, "sys"), Napi::Boolean::New(env, isSysKey));
         resultObj.Set(Napi::String::New(env, "scanCode"), Napi::Number::New(env, scanCode));
         resultObj.Set(Napi::String::New(env, "flags"), Napi::Number::New(env, flags));
         function.Call({resultObj});

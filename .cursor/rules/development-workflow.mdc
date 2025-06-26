@@ -1,0 +1,138 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Selection Hook 开发工作流程
+
+## 快速开始
+
+### 环境准备
+确保已安装必要的开发工具：
+- Node.js 18+ 
+- Visual Studio Build Tools 2019/2022
+- Python 3.x (安装 setuptools: `pip install setuptools`)
+
+### 构建项目
+```bash
+npm install      # 自动构建原生模块
+npm run demo     # 运行演示程序测试功能
+```
+
+## 开发流程
+
+### 1. JavaScript API 开发
+主要文件：[index.js](mdc:index.js)
+- 这里包含了所有对外暴露的 JavaScript API
+- 使用 EventEmitter 模式处理异步事件
+- 提供配置验证和错误处理
+
+### 2. TypeScript 类型定义
+主要文件：[index.d.ts](mdc:index.d.ts)
+- 完整的 TypeScript 接口定义
+- 包含所有配置选项和事件数据结构
+- 支持 IDE 智能提示和类型检查
+
+### 3. 原生 C++ 开发
+主要文件：[src/windows/selection_hook.cc](mdc:src/windows/selection_hook.cc)
+- 使用 Node-API (N-API) 开发
+- 集成 Windows UI Automation 和 Accessibility APIs
+- 实现鼠标/键盘钩子和文本选择检测
+
+工具库：
+- [src/windows/lib/clipboard.cc](mdc:src/windows/lib/clipboard.cc) - 剪贴板操作
+- [src/windows/lib/utils.cc](mdc:src/windows/lib/utils.cc) - 字符串转换和工具函数
+- [src/windows/lib/string_pool.cc](mdc:src/windows/lib/string_pool.cc) - 内存管理
+
+## 测试和调试
+
+### 运行演示程序
+```bash
+npm run demo
+```
+[examples/node-demo.js](mdc:examples/node-demo.js) 提供完整的功能测试：
+- 文本选择监控
+- 鼠标和键盘事件
+- 剪贴板操作
+- 各种配置模式测试
+
+### 调试技巧
+1. **启用调试模式**：
+   ```javascript
+   hook.start({ debug: true });
+   ```
+
+2. **检查事件数据**：
+   ```javascript
+   hook.on("text-selection", (data) => {
+     console.log("完整数据:", JSON.stringify(data, null, 2));
+   });
+   ```
+
+3. **测试不同应用**：
+   - Notepad (基础文本编辑器)
+   - VS Code/Cursor (现代编辑器)
+   - Chrome/Edge (网页内容)
+   - PDF 阅读器 (Adobe Acrobat)
+
+## 常见开发任务
+
+### 添加新的 API 方法
+1. 在 [src/windows/selection_hook.cc](mdc:src/windows/selection_hook.cc) 中实现 C++ 函数
+2. 在 [index.js](mdc:index.js) 中添加 JavaScript 包装器
+3. 在 [index.d.ts](mdc:index.d.ts) 中添加类型定义
+4. 在 [examples/node-demo.js](mdc:examples/node-demo.js) 中添加测试用例
+
+### 修改事件数据结构
+1. 更新 [index.d.ts](mdc:index.d.ts) 中的接口定义
+2. 修改 [index.js](mdc:index.js) 中的数据格式化逻辑
+3. 更新 C++ 代码中的数据生成逻辑
+
+### 处理平台兼容性
+项目当前仅支持 Windows，[binding.gyp](mdc:binding.gyp) 中的条件编译：
+```gyp
+"conditions": [
+  ['OS=="win"', {
+    "sources": [ /* Windows 源文件 */ ],
+    "libraries": [ /* Windows 库 */ ]
+  }, {
+    "defines": [ "WINDOWS_ONLY_MODULE" ]
+  }]
+]
+```
+
+## 构建和发布
+
+### 本地构建
+```bash
+npm run rebuild      # 重新构建原生模块
+```
+
+### 预构建二进制文件
+```bash
+npm run prebuild     # 为 Windows x64 和 ARM64 构建
+```
+
+### 发布检查清单
+- [ ] 更新 [package.json](mdc:package.json) 版本号
+- [ ] 测试所有示例代码
+- [ ] 确保 TypeScript 定义正确
+- [ ] 运行完整的功能测试
+- [ ] 检查内存泄漏和资源清理
+
+## 故障排除
+
+### 构建失败
+- 检查 Python 和 Visual Studio Build Tools 安装
+- 确保 Node.js 版本 >= 18
+- 运行 `npm install setuptools` 安装 Python 依赖
+
+### 运行时错误
+- 检查是否在 Windows 平台运行
+- 确保没有多个实例同时运行
+- 检查 Windows 事件查看器中的系统错误
+
+### 性能问题
+- 避免启用鼠标移动事件 (`enableMouseMoveEvent`)
+- 合理配置过滤器减少不必要的事件
+- 及时调用 `cleanup()` 释放资源

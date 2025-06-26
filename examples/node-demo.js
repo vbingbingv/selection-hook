@@ -32,6 +32,7 @@ const config = {
   globalFilterMode: 0, // Default global filter mode (see SelectionHook.FilterMode)
   passiveModeEnabled: false, // Passive mode for text selection
   fineTunedListEnabled: false, // Fine-tuned list for specific application behaviors
+  hookStarted: true, // Track if the hook is started (default: ON)
 };
 
 // Add variables for Ctrl key hold detection
@@ -101,6 +102,7 @@ function printWelcomeMessage() {
   console.log("  - mousePosEnd: Final mouse position when selection ended");
 
   console.log("\nKeyboard Controls:");
+  console.log("  S - Toggle start/stop hook (default: ON)");
   console.log("  M - Toggle mouse move events (default: OFF)");
   console.log("  E - Toggle other mouse events (default: OFF)");
   console.log("  K - Toggle keyboard events (default: OFF)");
@@ -112,6 +114,8 @@ function printWelcomeMessage() {
   console.log("  T - Toggle fine-tuned list (default: OFF)");
   console.log("  W - Write text 'Test clipboard write from selection-hook' to clipboard");
   console.log("  R - Read text from clipboard");
+  console.log("  A - Check accessibility permissions (macOS only)");
+  console.log("  Q - Request accessibility permissions (macOS only)");
   console.log("  ? - Show help");
   console.log("  Ctrl+C - Exit program");
   console.log("\nIn passive mode, press & hold Ctrl key to trigger text selection");
@@ -187,7 +191,11 @@ function setupMouseEventListeners() {
   // Mouse move events (high CPU usage - disabled by default)
   hook.on("mouse-move", (eventData) => {
     if (config.showMouseMoveEvents) {
-      console.log(colors.warning, "Mouse move:", `x: ${eventData.x}, y: ${eventData.y}`);
+      console.log(
+        colors.warning,
+        "Mouse move:",
+        `x: ${eventData.x}, y: ${eventData.y}, button: ${eventData.button}`
+      );
     }
   });
 
@@ -234,9 +242,9 @@ function setupKeyboardEventListeners() {
       console.log(
         colors.highlight,
         "Key down:",
-        `vkCode: ${eventData.vkCode}, scanCode: ${eventData.scanCode}, flags: ${eventData.flags}${
-          eventData.sys ? ", system key" : ""
-        }`
+        `uniKey: ${eventData.uniKey}, vkCode: ${eventData.vkCode}, scanCode: ${
+          eventData.scanCode
+        }, flags: ${eventData.flags}${eventData.sys ? ", system key" : ""}`
       );
     }
 
@@ -282,9 +290,9 @@ function setupKeyboardEventListeners() {
       console.log(
         colors.highlight,
         "Key up:",
-        `vkCode: ${eventData.vkCode}, scanCode: ${eventData.scanCode}, flags: ${eventData.flags}${
-          eventData.sys ? ", system key" : ""
-        }`
+        `uniKey: ${eventData.uniKey}, vkCode: ${eventData.vkCode}, scanCode: ${
+          eventData.scanCode
+        }, flags: ${eventData.flags}${eventData.sys ? ", system key" : ""}`
       );
     }
 
@@ -327,6 +335,10 @@ function handleKeyPress(key) {
   }
 
   switch (keyStr.toLowerCase()) {
+    case "s": // Toggle start/stop hook
+      toggleHookStartStop();
+      break;
+
     case "m": // Toggle mouse move events
       toggleMouseMoveEvents();
       break;
@@ -411,6 +423,44 @@ function handleKeyPress(key) {
       }
       break;
 
+    case "a":
+      // Check accessibility permissions (macOS only)
+      if (process.platform === "darwin") {
+        const isTrusted = hook.macIsProcessTrusted();
+        if (isTrusted) {
+          console.log(colors.success, "Process is trusted for accessibility on macOS");
+        } else {
+          console.log(colors.warning, "Process is NOT trusted for accessibility on macOS");
+          console.log(
+            colors.info,
+            "You may need to grant accessibility permissions in System Preferences"
+          );
+        }
+      } else {
+        console.log(colors.info, "Accessibility permission check is only available on macOS");
+      }
+      break;
+
+    case "q":
+      // Request accessibility permissions (macOS only)
+      if (process.platform === "darwin") {
+        console.log(colors.info, "Requesting accessibility permissions...");
+        const currentStatus = hook.macRequestProcessTrust();
+        if (currentStatus) {
+          console.log(colors.success, "Process is already trusted for accessibility on macOS");
+        } else {
+          console.log(colors.warning, "Process is not trusted for accessibility on macOS");
+          console.log(colors.info, "A system dialog may have appeared to grant permissions");
+          console.log(
+            colors.info,
+            "Please check System Preferences > Security & Privacy > Accessibility"
+          );
+        }
+      } else {
+        console.log(colors.info, "Accessibility permission request is only available on macOS");
+      }
+      break;
+
     case "?":
       // Show help
       printWelcomeMessage();
@@ -418,6 +468,34 @@ function handleKeyPress(key) {
 
     default:
       break;
+  }
+}
+
+/**
+ * Toggle hook start/stop
+ * Controls whether the hook is actively listening for events
+ */
+function toggleHookStartStop() {
+  config.hookStarted = !config.hookStarted;
+
+  if (config.hookStarted) {
+    // Start the hook
+    const success = hook.start({ debug: true });
+    if (success) {
+      console.log(colors.success, "Text selection hook: STARTED");
+    } else {
+      config.hookStarted = false; // Revert the toggle
+      console.log(colors.error, "Failed to start text selection hook");
+    }
+  } else {
+    // Stop the hook
+    const success = hook.stop();
+    if (success) {
+      console.log(colors.warning, "Text selection hook: STOPPED");
+    } else {
+      config.hookStarted = true; // Revert the toggle
+      console.log(colors.error, "Failed to stop text selection hook");
+    }
   }
 }
 
@@ -597,7 +675,7 @@ function showSelection(selectionData) {
     1: "UI Automation",
     2: "Focus Control",
     3: "Accessibility",
-    4: "Clipboard",
+    99: "Clipboard",
   };
 
   const posLevelMap = {

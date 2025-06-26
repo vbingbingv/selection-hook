@@ -1,0 +1,109 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Selection Hook 项目结构指南
+
+这是一个 Node.js 原生模块，提供 Windows 平台跨应用的文本选择监控功能。
+
+## 项目概述
+
+Selection Hook 是一个使用 Node-API (N-API) 开发的原生模块，支持：
+- 跨应用程序文本选择监控
+- 鼠标和键盘事件监听
+- 多种文本提取方法（UI Automation、Accessibility APIs、剪贴板回退等）
+- 剪贴板读写功能
+
+## 核心文件结构
+
+### 主要入口文件
+- [index.js](mdc:index.js) - 主要 JavaScript API 入口，封装了原生模块的功能
+- [index.d.ts](mdc:index.d.ts) - TypeScript 类型定义，提供完整的 API 接口文档
+- [package.json](mdc:package.json) - 项目配置，包含依赖和构建脚本
+
+### 构建配置
+- [binding.gyp](mdc:binding.gyp) - 原生模块构建配置，定义了 C++ 源文件和链接库
+
+### 原生代码 (C++)
+- [src/windows/selection_hook.cc](mdc:src/windows/selection_hook.cc) - 主要 C++ 实现文件
+- [src/windows/lib/](mdc:src/windows/lib) - 工具库目录
+  - [clipboard.cc](mdc:src/windows/lib/clipboard.cc) / [clipboard.h](mdc:src/windows/lib/clipboard.h) - 剪贴板操作
+  - [utils.cc](mdc:src/windows/lib/utils.cc) / [utils.h](mdc:src/windows/lib/utils.h) - 通用工具函数
+  - [string_pool.cc](mdc:src/windows/lib/string_pool.cc) / [string_pool.h](mdc:src/windows/lib/string_pool.h) - 字符串池管理
+
+### 示例和测试
+- [examples/node-demo.js](mdc:examples/node-demo.js) - 完整的功能演示脚本
+
+## API 使用指南
+
+### 基本使用模式
+```javascript
+const SelectionHook = require("selection-hook");
+const hook = new SelectionHook();
+
+// 监听文本选择事件
+hook.on("text-selection", (data) => {
+  console.log("选中的文本:", data.text);
+  console.log("程序名:", data.programName);
+  console.log("选择方法:", data.method);
+});
+
+// 启动监控
+hook.start({
+  debug: true,
+  enableClipboard: true
+});
+```
+
+### 核心类和常量
+- `SelectionHook.SelectionMethod` - 文本提取方法枚举
+- `SelectionHook.PositionLevel` - 位置信息级别
+- `SelectionHook.FilterMode` - 过滤模式
+- `SelectionHook.FineTunedListType` - 细粒度配置类型
+
+### 主要方法
+- `start(config)` - 启动监控
+- `stop()` - 停止监控
+- `getCurrentSelection()` - 获取当前选择
+- `enableClipboard()` / `disableClipboard()` - 剪贴板功能控制
+- `setClipboardMode(mode, programList)` - 设置剪贴板模式
+- `setGlobalFilterMode(mode, programList)` - 设置全局过滤模式
+
+## 开发指南
+
+### 构建要求
+- Node.js v18+ 
+- Windows 平台
+- Visual Studio Build Tools (包含 MSVC)
+- Python 3.x (用于 node-gyp)
+
+### 构建命令
+```bash
+npm install          # 自动构建
+npm run rebuild      # 手动重新构建
+npm run demo         # 运行演示程序
+```
+
+### 调试建议
+1. 使用 `debug: true` 配置开启调试日志
+2. 运行 [examples/node-demo.js](mdc:examples/node-demo.js) 测试各种功能
+3. 检查 Windows 事件查看器查看系统级错误
+
+### 扩展开发
+- 修改 [src/windows/selection_hook.cc](mdc:src/windows/selection_hook.cc) 添加新的原生功能
+- 在 [index.js](mdc:index.js) 中添加 JavaScript 包装器
+- 更新 [index.d.ts](mdc:index.d.ts) 中的类型定义
+
+## 支持的 Windows API
+- UI Automation (UIAutomationCore.lib)
+- User32 API (user32.lib) - 用于鼠标钩子
+- Accessibility APIs
+- Clipboard APIs
+
+## 注意事项
+- 仅支持 Windows 平台
+- 某些功能可能需要管理员权限
+- 鼠标移动事件会导致高 CPU 使用率
+- 建议使用单例模式避免多实例资源消耗
+

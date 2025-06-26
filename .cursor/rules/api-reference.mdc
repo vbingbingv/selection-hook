@@ -1,0 +1,252 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Selection Hook API 参考
+
+## 类和构造函数
+
+### SelectionHook
+```javascript
+const SelectionHook = require("selection-hook");
+const hook = new SelectionHook();
+```
+
+主要的文本选择监控类，继承自 EventEmitter。详细实现见 [index.js](mdc:index.js)。
+
+## 核心方法
+
+### 生命周期管理
+
+#### `start(config?: SelectionConfig): boolean`
+启动文本选择监控。
+- **参数**: `config` - 可选配置对象，详见 [SelectionConfig](mdc:#selectionconfig)
+- **返回**: `boolean` - 启动成功返回 true
+- **示例**:
+```javascript
+hook.start({
+  debug: true,
+  enableClipboard: true,
+  enableMouseMoveEvent: false
+});
+```
+
+#### `stop(): boolean`
+停止文本选择监控。
+- **返回**: `boolean` - 停止成功返回 true
+
+#### `isRunning(): boolean`
+检查监控是否正在运行。
+- **返回**: `boolean` - 运行中返回 true
+
+#### `cleanup(): void`
+清理资源并完全停止监控。应在程序结束前调用。
+
+### 文本选择
+
+#### `getCurrentSelection(): TextSelectionData | null`
+获取当前文本选择。
+- **返回**: `TextSelectionData | null` - 选择数据或 null
+- **说明**: 仅在监控运行时有效
+
+### 鼠标事件控制
+
+#### `enableMouseMoveEvent(): boolean`
+启用鼠标移动事件监听（高 CPU 使用率）。
+- **返回**: `boolean` - 启用成功返回 true
+- **警告**: 会显著增加 CPU 使用率
+
+#### `disableMouseMoveEvent(): boolean`
+禁用鼠标移动事件监听。
+- **返回**: `boolean` - 禁用成功返回 true
+
+### 剪贴板功能
+
+#### `enableClipboard(): boolean`
+启用剪贴板回退功能。
+- **返回**: `boolean` - 启用成功返回 true
+
+#### `disableClipboard(): boolean`
+禁用剪贴板回退功能。
+- **返回**: `boolean` - 禁用成功返回 true
+
+#### `writeToClipboard(text: string): boolean`
+向剪贴板写入文本。
+- **参数**: `text` - 要写入的文本
+- **返回**: `boolean` - 写入成功返回 true
+
+#### `readFromClipboard(): string | null`
+从剪贴板读取文本。
+- **返回**: `string | null` - 剪贴板文本或 null
+
+### 高级配置
+
+#### `setClipboardMode(mode: FilterMode, programList?: string[]): boolean`
+设置剪贴板模式和程序过滤列表。
+- **参数**: 
+  - `mode` - 过滤模式，详见 [FilterMode](mdc:#filtermode)
+  - `programList` - 程序名称列表（可选）
+- **返回**: `boolean` - 设置成功返回 true
+
+#### `setGlobalFilterMode(mode: FilterMode, programList?: string[]): boolean`
+设置全局过滤模式。
+- **参数**: 
+  - `mode` - 过滤模式
+  - `programList` - 程序名称列表（可选）
+- **返回**: `boolean` - 设置成功返回 true
+
+#### `setFineTunedList(listType: FineTunedListType, programList?: string[]): boolean`
+设置细粒度配置列表。
+- **参数**: 
+  - `listType` - 配置类型，详见 [FineTunedListType](mdc:#finetunedlisttype)
+  - `programList` - 程序名称列表（可选）
+- **返回**: `boolean` - 设置成功返回 true
+
+#### `setSelectionPassiveMode(passive: boolean): boolean`
+设置被动选择模式。
+- **参数**: `passive` - 是否启用被动模式
+- **返回**: `boolean` - 设置成功返回 true
+- **说明**: 被动模式下不会自动触发 `text-selection` 事件
+
+## 事件
+
+### text-selection
+```javascript
+hook.on("text-selection", (data: TextSelectionData) => {
+  // 处理文本选择事件
+});
+```
+当检测到文本选择时触发。数据结构详见 [TextSelectionData](mdc:#textselectiondata)。
+
+### 鼠标事件
+```javascript
+hook.on("mouse-down", (data: MouseEventData) => {});
+hook.on("mouse-up", (data: MouseEventData) => {});
+hook.on("mouse-move", (data: MouseEventData) => {}); // 需要启用
+hook.on("mouse-wheel", (data: MouseWheelEventData) => {});
+```
+
+### 键盘事件
+```javascript
+hook.on("key-down", (data: KeyboardEventData) => {});
+hook.on("key-up", (data: KeyboardEventData) => {});
+```
+
+### 状态事件
+```javascript
+hook.on("status", (status: string) => {});
+hook.on("error", (error: Error) => {});
+```
+
+## 数据类型
+
+### TextSelectionData
+文本选择数据结构，详见 [index.d.ts](mdc:index.d.ts):
+```typescript
+interface TextSelectionData {
+  text: string;                    // 选中的文本
+  programName: string;             // 程序名称
+  startTop: { x: number; y: number };     // 起始点上方坐标
+  startBottom: { x: number; y: number };  // 起始点下方坐标
+  endTop: { x: number; y: number };       // 结束点上方坐标
+  endBottom: { x: number; y: number };    // 结束点下方坐标
+  mousePosStart: { x: number; y: number }; // 鼠标起始位置
+  mousePosEnd: { x: number; y: number };   // 鼠标结束位置
+  method: SelectionMethod;          // 提取方法
+  posLevel: PositionLevel;          // 位置信息级别
+}
+```
+
+### SelectionConfig
+配置对象结构：
+```typescript
+interface SelectionConfig {
+  debug?: boolean;                 // 启用调试日志
+  enableMouseMoveEvent?: boolean;  // 启用鼠标移动事件
+  enableClipboard?: boolean;       // 启用剪贴板回退
+  selectionPassiveMode?: boolean;  // 启用被动模式
+  clipboardMode?: FilterMode;      // 剪贴板模式
+  programList?: string[];          // 程序列表
+}
+```
+
+## 枚举常量
+
+### SelectionMethod
+文本提取方法：
+```javascript
+SelectionHook.SelectionMethod = {
+  NONE: 0,        // 无方法
+  UIA: 1,         // UI Automation
+  FOCUSCTL: 2,    // 焦点控件
+  ACCESSIBLE: 3,  // 可访问性 API
+  CLIPBOARD: 4    // 剪贴板回退
+};
+```
+
+### PositionLevel
+位置信息级别：
+```javascript
+SelectionHook.PositionLevel = {
+  NONE: 0,           // 无位置信息
+  MOUSE_SINGLE: 1,   // 单一鼠标位置
+  MOUSE_DUAL: 2,     // 双重鼠标位置
+  SEL_FULL: 3,       // 完整选择范围
+  SEL_DETAILED: 4    // 详细选择信息
+};
+```
+
+### FilterMode
+过滤模式：
+```javascript
+SelectionHook.FilterMode = {
+  DEFAULT: 0,        // 默认模式
+  INCLUDE_LIST: 1,   // 包含列表
+  EXCLUDE_LIST: 2    // 排除列表
+};
+```
+
+### FineTunedListType
+细粒度配置类型：
+```javascript
+SelectionHook.FineTunedListType = {
+  EXCLUDE_CLIPBOARD_CURSOR_DETECT: 0,  // 排除剪贴板光标检测
+  INCLUDE_CLIPBOARD_DELAY_READ: 1      // 包含剪贴板延迟读取
+};
+```
+
+## 使用示例
+
+### 基本文本选择监控
+```javascript
+const hook = new SelectionHook();
+
+hook.on("text-selection", (data) => {
+  console.log(`在 ${data.programName} 中选择了: ${data.text}`);
+});
+
+hook.start({ debug: true });
+```
+
+### 完整的事件监听
+参考 [examples/node-demo.js](mdc:examples/node-demo.js) 了解完整的使用示例，包括：
+- 所有事件类型的监听
+- 交互式配置切换
+- 错误处理和资源清理
+
+### 高级配置示例
+```javascript
+// 设置剪贴板仅在特定程序中生效
+hook.setClipboardMode(
+  SelectionHook.FilterMode.INCLUDE_LIST, 
+  ["notepad.exe", "wordpad.exe"]
+);
+
+// 排除某些程序的全局监控
+hook.setGlobalFilterMode(
+  SelectionHook.FilterMode.EXCLUDE_LIST,
+  ["game.exe", "video-player.exe"]
+);
+```
+
