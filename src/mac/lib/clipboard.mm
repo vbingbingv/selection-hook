@@ -50,3 +50,18 @@ bool WriteClipboard(const std::string &content)
         return success == YES;
     }
 }
+
+/**
+ * Gets the current change count of clipboard
+ * @return The change count of NSPasteboard
+ *
+ * Cost: ~2 us
+ */
+int64_t GetClipboardSequence()
+{
+    @autoreleasepool
+    {
+        NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+        return static_cast<int64_t>([pasteboard changeCount]);
+    }
+}
