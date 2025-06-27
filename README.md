@@ -45,11 +45,34 @@ Maybe the first-ever open-source, fully functional text selection tool.
 npm install selection-hook
 ```
 
-### Notes
+## Demo
 
-#### Avoid rebuilding
+```bash
+npm run demo
+```
 
-The npm package ships with a pre-built `.node` file — no rebuilding needed. For Electron rebuild issues, add these values to your `electron-forge` config to avoid rebuilding:
+## Building
+
+### Use pre-built packages
+
+The npm package ships with pre-built `.node` files in `prebuilds/*` — no rebuilding needed. 
+
+### Build from scratch
+
+- Use `npm run rebuild` to build your platform's specific package.
+- Use `npm run prebuild` to build packages for all the supported platforms. 
+
+#### Python setuptools
+
+When building, if the `ModuleNotFoundError: No module named 'distutils'` error prompt appears, please install the necessary Python library via `pip install setuptools`.
+
+### Electron rebuilding
+
+When using `electron-builder` for packaging, Electron will forcibly rebuild Node packages. In this case, you may need to run `npm install` in `./node_modules/selection-hook` in advance to ensure the necessary packages are downloaded.
+
+### Avoid Electron rebuilding
+
+When using `electron-forge` for packaging, you can add these values to your `electron-forge` config to avoid rebuilding:
 
 ```javascript
 rebuildConfig: {
@@ -57,15 +80,6 @@ rebuildConfig: {
 },
 ```
 
-#### Python setuptools
-
-When building, if the `ModuleNotFoundError: No module named 'distutils'` error prompt appears, please install the necessary Python library via `pip install setuptools`.
-
-## Demo
-
-```bash
-npm run demo
-```
 
 ## Usage
 
