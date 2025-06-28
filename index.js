@@ -9,23 +9,33 @@
  */
 
 const EventEmitter = require("events");
-const gypBuild = require("node-gyp-build");
 const path = require("path");
 
 const isWindows = process.platform === "win32";
 const isMac = process.platform === "darwin";
 
+const isArm = process.arch === 'arm64'
+const isX64 = process.arch === 'x64'
+
 let nativeModule = null;
 // Make debugFlag a private module variable to avoid global state issues
 let _debugFlag = false;
 
-try {
-  if (!isWindows && !isMac) {
-    throw new Error("[selection-hook] Only supports Windows and macOS platforms");
+if (isWindows) {
+  if (isArm) {
+    nativeModule = require("./prebuilds/win32-arm64/@haier+selection-hook.node")
   }
-  nativeModule = gypBuild(path.resolve(__dirname));
-} catch (err) {
-  console.error("[selection-hook] Failed to load native module:", err.message);
+  if (isX64) {
+    nativeModule = require("./prebuilds/win32-x64/@haier+selection-hook.node");
+  }
+}
+if (isMac) {
+  if (isArm) {
+    nativeModule = require("./prebuilds/darwin-arm64/@haier+selection-hook.node")
+  }
+  if (isX64) {
+    nativeModule = require("./prebuilds/darwin-x64/@haier+selection-hook.node")
+  }
 }
 
 class SelectionHook extends EventEmitter {

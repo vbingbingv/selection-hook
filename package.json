@@ -1,17 +1,16 @@
 {
-  "name": "selection-hook",
-  "version": "1.0.1",
+  "name": "@haier/selection-hook",
+  "version": "1.0.0",
   "description": "Text selection monitoring of native Node.js module with N-API across applications",
-  "author": "0xfullex",
+  "author": "lengfangbing",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/0xfullex/selection-hook.git"
+    "url": "https://hgit.haier.net/S04714/selection-hook"
   },
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "install": "node-gyp-build",
-    "rebuild": "node-gyp rebuild",
+    "install": "npm run prebuild",
     "prebuild": "npm run prebuild:win && npm run prebuild:mac",
     "prebuild:win": "npm run prebuild:win:x64 && npm run prebuild:win:arm64",
     "prebuild:win:x64": "prebuildify --napi --platform=win32 --arch=x64",
@@ -19,7 +18,16 @@
     "prebuild:mac": "npm run prebuild:mac:x64 && npm run prebuild:mac:arm64",
     "prebuild:mac:x64": "prebuildify --napi --platform=darwin --arch=x64",
     "prebuild:mac:arm64": "prebuildify --napi --platform=darwin --arch=arm64",
+    "prepublishOnly": "npm run prebuild",
     "demo": "node --trace-deprecation --force-node-api-uncaught-exceptions-policy=true examples/node-demo.js"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "prebuilds"
+  ],
+  "publishConfig": {
+    "registry": "https://nexus.haier.net/repository/dts-npm/"
   },
   "keywords": [
     "node",
@@ -36,17 +44,13 @@
     "uiautomation"
   ],
   "license": "MIT",
-  "dependencies": {
-    "node-gyp-build": "^4.8.4"
-  },
   "devDependencies": {
     "node-addon-api": "^5.1.0",
     "node-gyp": "^9.4.1",
-    "prebuildify": "^6.0.1"
+    "prebuildify": "^6.0.1",
+    "node-gyp-build": "^4.8.4"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "gypfile": true,
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  }
 }
