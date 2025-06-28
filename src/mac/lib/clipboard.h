@@ -18,3 +18,9 @@ bool ReadClipboard(std::string &content);
  * @return true if successful, false otherwise
  */
 bool WriteClipboard(const std::string &content);
+
+/**
+ * Gets the current change count of clipboard
+ * @return The change count of NSPasteboard
+ */
+int64_t GetClipboardSequence();

@@ -27,6 +27,7 @@
  */
 
 #import <napi.h>
+#include <cstdint>
 
 #import <atomic>
 #import <string>
@@ -34,6 +35,7 @@
 // #import <vector>
 
 #import <ApplicationServices/ApplicationServices.h>
+#import <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
 
 #import "lib/clipboard.h"
@@ -246,6 +248,8 @@ class SelectionHook : public Napi::ObjectWrap<SelectionHook>
     // passive mode: only trigger when user call GetSelectionText
     bool is_selection_passive_mode = false;
     bool is_enabled_clipboard = true;  // Enable by default
+    // Store clipboard sequence number when mouse down
+    int64_t clipboard_sequence = 0;
 
     // clipboard filter mode
     FilterMode clipboard_filter_mode = FilterMode::Default;
@@ -915,35 +919,55 @@ bool SelectionHook::GetTextViaAXAPI(NSRunningApplication *frontApp, TextSelectio
  */
 bool SelectionHook::GetTextViaClipboard(NSRunningApplication *frontApp, TextSelectionInfo &selectionInfo)
 {
+    int64_t newClipboardSequence = GetClipboardSequence();
+
+    // Check if clipboard sequence number has changed since mouse down
+    // if it's changed, it means user has copied something, we can read it directly
+    if (newClipboardSequence != clipboard_sequence)
+    {
+        // Read the new clipboard content
+        std::string newContent;
+        if (ReadClipboard(newContent))
+        {
+            selectionInfo.text = newContent;
+            return true;
+        }
+    }
+
+    // no new copied message or read clipboard failed, we need to send Cmd+C to copy
+
+    clipboard_sequence = newClipboardSequence;
+
     // Store current clipboard content to restore later
     std::string originalContent;
     bool hasOriginalContent = ReadClipboard(originalContent);
 
     // Send Cmd+C to copy selected text
     if (!SendCopyKey(frontApp.processIdentifier))
-    {
         return false;
+
+    // Check clipboard sequence number in a loop with 20ms interval
+    // This gives the copy operation up to 100ms to complete
+    bool clipboardChanged = false;
+
+    for (int i = 0; i < 10; i++)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        newClipboardSequence = GetClipboardSequence();
+        if (newClipboardSequence != clipboard_sequence)
+        {
+            clipboardChanged = true;
+            break;
+        }
     }
 
-    // Small delay to ensure the copy operation completes
-    // This is necessary for clipboard-based text extraction
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    if (!clipboardChanged)
+        return false;
 
     // Read the new clipboard content
     std::string newContent;
-    if (!ReadClipboard(newContent))
-    {
-        // Restore original clipboard if possible
-        if (hasOriginalContent)
-        {
-            WriteClipboard(originalContent);
-        }
-
-        return false;
-    }
-
-    // Check if the copied text is valid
-    if (IsTrimmedEmpty(newContent))
+    if (!ReadClipboard(newContent) || IsTrimmedEmpty(newContent))
     {
         // Restore original clipboard if possible
         if (hasOriginalContent)
@@ -1474,6 +1498,7 @@ void SelectionHook::ProcessMouseEvent(Napi::Env env, Napi::Function function, Mo
             lastMouseDownTime = currentTime;
             lastMouseDownPos = currentPos;
             isLastMouseDownValidCursor = isIBeamCursor([NSCursor currentSystemCursor]);
+            currentInstance->clipboard_sequence = GetClipboardSequence();
             break;
         }
         case kCGEventLeftMouseUp:
