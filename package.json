@@ -10,7 +10,7 @@
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "install": "npm run prebuild",
+    "install": "node scripts/install.js",
     "prebuild": "npm run prebuild:win && npm run prebuild:mac",
     "prebuild:win": "npm run prebuild:win:x64 && npm run prebuild:win:arm64",
     "prebuild:win:x64": "prebuildify --napi --platform=win32 --arch=x64",
@@ -22,6 +22,7 @@
     "demo": "node --trace-deprecation --force-node-api-uncaught-exceptions-policy=true examples/node-demo.js"
   },
   "files": [
+    "scripts",
     "index.js",
     "index.d.ts",
     "prebuilds"
@@ -47,8 +48,7 @@
   "devDependencies": {
     "node-addon-api": "^5.1.0",
     "node-gyp": "^9.4.1",
-    "prebuildify": "^6.0.1",
-    "node-gyp-build": "^4.8.4"
+    "prebuildify": "^6.0.1"
   },
   "engines": {
     "node": ">=18.0.0"

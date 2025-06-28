@@ -9,7 +9,6 @@
  */
 
 const EventEmitter = require("events");
-const path = require("path");
 
 const isWindows = process.platform === "win32";
 const isMac = process.platform === "darwin";
