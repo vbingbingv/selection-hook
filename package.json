@@ -1,6 +1,6 @@
 {
   "name": "@haier/selection-hook",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Text selection monitoring of native Node.js module with N-API across applications",
   "author": "lengfangbing",
   "repository": {
@@ -11,14 +11,13 @@
   "types": "index.d.ts",
   "scripts": {
     "install": "node scripts/install.js",
-    "prebuild": "npm run prebuild:win && npm run prebuild:mac",
     "prebuild:win": "npm run prebuild:win:x64 && npm run prebuild:win:arm64",
     "prebuild:win:x64": "prebuildify --napi --platform=win32 --arch=x64",
     "prebuild:win:arm64": "prebuildify --napi --platform=win32 --arch=arm64",
     "prebuild:mac": "npm run prebuild:mac:x64 && npm run prebuild:mac:arm64",
     "prebuild:mac:x64": "prebuildify --napi --platform=darwin --arch=x64",
     "prebuild:mac:arm64": "prebuildify --napi --platform=darwin --arch=arm64",
-    "prepublishOnly": "npm run prebuild",
+    "prepublishOnly": "node scripts/publish.js",
     "demo": "node --trace-deprecation --force-node-api-uncaught-exceptions-policy=true examples/node-demo.js"
   },
   "files": [
